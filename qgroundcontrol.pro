@@ -2,12 +2,11 @@
 # prefer version from external directory /
 # from http://github.com/pixhawk/qmapcontrol/
 # over bundled version in lib directory
-# Version from GIT repository is preferred
-# include ( "../qmapcontrol/QMapControl/QMapControl.pri" ) #{
-# Include bundled version if necessary
-include(lib/QMapControl/QMapControl.pri)
+!include( "../qmapcontrol/QMapControl/QMapControl.pri" ) {
+	!build_pass:message("Including bundled QMapControl version as FALLBACK. This is fine on Linux and MacOS, but not the best choice in Windows")
+	include(lib/QMapControl/QMapControl.pri)
+}
 
-# message("Including bundled QMapControl version as FALLBACK. This is fine on Linux and MacOS, but not the best choice in Windows")
 QT += network \
     opengl \
     svg \
@@ -24,18 +23,41 @@ OBJECTS_DIR = $$BUILDDIR/obj
 MOC_DIR = $$BUILDDIR/moc
 UI_HEADERS_DIR = src/ui/generated
 
-# }
 # Include general settings for MAVGround
 # necessary as last include to override any non-acceptable settings
 # done by the plugins above
 include(qgroundcontrol.pri)
 
-# QWT plot and QExtSerial depend on paths set by qgroundcontrol.pri
+# QWT plot and QextSerialPort depend on paths set by qgroundcontrol.pri
 # Include serial port library
-include(src/lib/qextserialport/qextserialport.pri)
+linux-g++ { # GNU/Linux
+	exists( /usr/lib/libqextserialport.so.1.2* ):exists( /usr/include/qextserialport ) {
+		!build_pass:message( "QextSerialPort 1.2 library and header found on system" )
+		LIBS += -lqextserialport
+		DEFINES += _TTY_POSIX_
+		INCLUDEPATH += /usr/include/qextserialport
+	} else {
+		!build_pass:message( "QextSerialPort 1.2 library NOT found on systen, include bundled QextSerial version" )
+		include(src/lib/qextserialport/qextserialport.pri)
+	}
+} else { #not GNU/Linux
+	include(src/lib/qextserialport/qextserialport.pri)
+}
 
 # Include QWT plotting library
-include(src/lib/qwt/qwt.pri)
+linux-g++ { # GNU/Linux
+	exists( /usr/lib/libqwt-qt4* ):exists( /usr/include/qwt-qt4 ){
+		!build_pass:message( "QWT plotting library and header found on system" )
+		LIBS += -lqwt-qt4
+		INCLUDEPATH += /usr/include/qwt-qt4
+	} else {
+		!build_pass:message( "QWT plotting library NOT found on systen, include bundled QWT version" )
+		include(src/lib/qwt/qwt.pri)
+	}
+} else { #not GNU/Linux
+	include(src/lib/qwt/qwt.pri)
+}
+
 DEPENDPATH += . \
     lib/QMapControl \
     lib/QMapControl/src \
