@@ -42,29 +42,44 @@ This file is part of the PIXHAWK project
 class LinkInterface : public QThread {
 	Q_OBJECT
 public:
-        //virtual ~LinkInterface() = 0;
+	LinkInterface(int id = -1);
+	virtual ~LinkInterface() {};
 
 	/* Connection management */
 
-        /**
-         * @brief Get the ID of this link
-         *
-         * The ID is an unsigned integer, starting at 0
-         * @return ID of this link
-         **/
-        virtual int getId() = 0;
+	/**
+	 * @brief Get the ID of this link
+	 *
+	 * The ID is an (unique) integer for accessing a link. It similar to
+	 * file descriptors in POSIX operating systems. If correctly set it
+	 * starts at 0.
+	 *
+	 * @return ID of this link
+	 * @see ProtocolStack
+	 */
+	virtual int getID() const;
 
-        /**
-         * @brief Get the human readable name of this link
-         */
-        virtual QString getName() = 0;
+	/**
+	 * @brief Set the ID of this link
+	 */
+	virtual void setID(int id);
+
+	/**
+	 * @brief Get the human readable name of this link
+	 */
+	virtual const QString& getName() const;
+
+	/**
+	 * @brief Set the human readable name of this link
+	 */
+	virtual void setName(const QString& name);
 
 	/**
 	 * @brief Determine the connection status
 	 *
 	 * @return True if the connection is established, false otherwise
 	 **/
-	virtual bool isConnected() = 0;
+	virtual bool isConnected() const = 0;
 
 	/* Connection characteristics */
 
@@ -81,7 +96,7 @@ public:
 	 * @see getCurrentDataRate() For the data rate of the last transferred chunk
 	 * @see getMaxDataRate() For the maximum data rate
 	 **/
-	virtual qint64 getNominalDataRate() = 0;
+	virtual qint64 getNominalDataRate() const = 0;
 
 	/**
 	 * @brief Full duplex support of this interface.
@@ -91,7 +106,7 @@ public:
 	 *
 	 * @return True if the interface supports full duplex, false otherwise
 	 **/
-	virtual bool isFullDuplex() = 0;
+	virtual bool isFullDuplex() const = 0;
 
 	/**
 	 * @brief Get the link quality.
@@ -101,7 +116,7 @@ public:
 	 *
 	 * @return The link quality in integer percent or -1 if not supported
 	 **/
-	virtual int getLinkQuality() = 0;
+	virtual int getLinkQuality() const = 0;
 
 	/**
 	 * @Brief Get the long term (complete) mean of the data rate
@@ -115,7 +130,7 @@ public:
 	 * @see getCurrentDataRate() For the data rate of the last transferred chunk
 	 * @see getMaxDataRate() For the maximum data rate
 	 **/
-	virtual qint64 getTotalUpstream() = 0;
+	virtual qint64 getTotalUpstream() const = 0;
 
 	/**
 	 * @Brief Get the current data rate
@@ -128,7 +143,7 @@ public:
 	 * @see getShortTermDataRate() For a the mean data rate of the last seconds
 	 * @see getMaxDataRate() For the maximum data rate
 	 **/
-	virtual qint64 getCurrentUpstream() = 0;
+	virtual qint64 getCurrentUpstream() const = 0;
 
 	/**
 	 * @Brief Get the maximum data rate
@@ -141,14 +156,14 @@ public:
 	 * @see getShortTermDataRate() For a the mean data rate of the last seconds
 	 * @see getCurrentDataRate() For the data rate of the last transferred chunk
 	 **/
-	virtual qint64 getMaxUpstream() = 0;
+	virtual qint64 getMaxUpstream() const = 0;
 
 	/**
 	 * @Brief Get the total number of bits sent
 	 *
 	 * @return The number of sent bits
 	 **/
-	virtual qint64 getBitsSent() = 0;
+	virtual qint64 getBitsSent() const = 0;
 
 	/**
 	 * @Brief Get the total number of bits received
@@ -156,28 +171,28 @@ public:
 	 * @return The number of received bits
 	 * @bug Decide if the bits should be counted fromt the instantiation of the interface or if the counter should reset on disconnect.
 	 **/
-	virtual qint64 getBitsReceived() = 0;
+	virtual qint64 getBitsReceived() const = 0;
 
 	/**
-	 * @brief Connect this interface logically
+	 * @brief Open (connect) this interface logically
 	 *
 	 * @return True if connection could be established, false otherwise
 	 **/
-	virtual bool connect() = 0;
+	virtual bool open() = 0;
 
 	/**
-	 * @brief Disconnect this interface logically
+	 * @brief Close (disconnect) this interface logically
 	 *
 	 * @return True if connection could be terminated, false otherwise
 	 **/
-	virtual bool disconnect() = 0;
+	virtual bool close() = 0;
 
 	/**
 	 * @brief Get the current number of bytes in buffer.
 	 *
 	 * @return The number of bytes ready to read
 	 **/
-        virtual qint64 bytesAvailable() = 0;
+        virtual qint64 bytesAvailable() const = 0;
 
 public slots:
 
@@ -190,24 +205,26 @@ public slots:
 	 *
 	 * @param bytes The pointer to the byte array containing the data
 	 * @param length The length of the data array
+	 * @return The number of written bytes
 	 **/
-	virtual void writeBytes(const char *bytes, qint64 length) = 0;
+	virtual qint64 writeBytes(const char *bytes, qint64 length) = 0;
 
 	/**
 	 * @brief Read a number of bytes from the interface.
 	 *
 	 * @param bytes The pointer to write the bytes to
 	 * @param maxLength The maximum length which can be written
+	 * @return The number of readed bytes
 	 **/
-	virtual void readBytes(char *bytes, qint64 maxLength) = 0;
+	virtual qint64 readBytes(char *bytes, qint64 maxLength) = 0;
 
 signals:
 	/**
 	 * @brief This signal is emitted when new data is ready to read in the queue
 	 *
-	 * @param link The Interface to read from
+	 * @param linkID The ID of the link to read from
 	 **/
-	void bytesReady(LinkInterface* link);
+	void bytesReady(int linkID);
 
         /**
          * @brief New data arrived
@@ -216,36 +233,62 @@ signals:
          *
          * @param data the new bytes
          */
-        void bytesReceived(LinkInterface* link, QByteArray data);
+        void bytesReceived(int linkID, const QByteArray &data);
 
 	/**
 	 * @brief This signal is emitted instantly when the link is connected
 	 **/
-	void connected();
+	void opened();
 
 	/**
 	 * @brief This signal is emitted instantly when the link is disconnected
 	 **/
-	void disconnected();
+	void closed();
 
 	/**
 	 * @brief This signal is emitted instantly when the link status changes
 	 **/
-	void connected(bool connected);
+	void opened(bool opened);
 
         /**
          * @brief This signal is emitted if the human readable name of this link changes
          */
-        void nameChanged(QString name);
+        void nameChanged(const QString &name);
 
 protected:
-        static int getNextLinkId()
-        {
-            static int nextId = 0;
-            return nextId++;
-        }
+	int id;
+	QString name;
 
 };
+
+// ----------------------------------------------------------------------------
+// Inline Implementations
+// ----------------------------------------------------------------------------
+inline LinkInterface::LinkInterface(int id) :
+	id(id)
+{
+}
+
+inline int LinkInterface::getID() const
+{
+	return id;
+}
+
+inline void LinkInterface::setID(int id)
+{
+	LinkInterface::id = id;
+}
+
+inline const QString& LinkInterface::getName() const
+{
+	return name;
+}
+
+inline void LinkInterface::setName(const QString& name)
+{
+	LinkInterface::name = name;
+	emit nameChanged(LinkInterface::name);
+}
 
 /* Declare C++ interface as Qt interface */
 //Q_DECLARE_INTERFACE(LinkInterface, "org.openground.comm.links.LinkInterface/1.0")
