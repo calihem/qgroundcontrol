@@ -56,27 +56,26 @@ This file is part of the PIXHAWK project
  * the MAVLINK_HEARTBEAT_DEFAULT_RATE to all connected links.
  */
 MAVLinkProtocol::MAVLinkProtocol() :
-        heartbeatTimer(new QTimer(this)),
-        heartbeatRate(MAVLINK_HEARTBEAT_DEFAULT_RATE),
-        m_heartbeatsEnabled(false),
-        m_loggingEnabled(false),
-        m_logfile(NULL)
+	heartbeatTimer(this),
+	heartbeatRate(MAVLINK_HEARTBEAT_DEFAULT_RATE),
+	m_heartbeatsEnabled(false),
+	m_loggingEnabled(false),
+	m_logfile(NULL),
+	totalReceiveCounter(0),
+	totalLossCounter(0),
+	currReceiveCounter(0),
+	currLossCounter(0)
+
 {
-    start(QThread::LowPriority);
-    // Start heartbeat timer, emitting a heartbeat at the configured rate
-    connect(heartbeatTimer, SIGNAL(timeout()), this, SLOT(sendHeartbeat()));
-    heartbeatTimer->start(1000/heartbeatRate);
-    totalReceiveCounter = 0;
-    totalLossCounter = 0;
-    currReceiveCounter = 0;
-    currLossCounter = 0;
-    for (int i = 0; i < 256; i++)
-    {
-        for (int j = 0; j < 256; j++)
-        {
-            lastIndex[i][j] = -1;
-        }
-    }
+	name = tr("MAVLink Protocol");
+
+	start(QThread::LowPriority);
+
+	// Start heartbeat timer, emitting a heartbeat at the configured rate
+	connect(&heartbeatTimer, SIGNAL(timeout()), this, SLOT(sendHeartbeat()));
+	heartbeatTimer.start(1000/heartbeatRate);
+
+	memset(lastIndex, -1, sizeof(int)*256*256);
 }
 
 MAVLinkProtocol::~MAVLinkProtocol()
@@ -100,29 +99,22 @@ QString MAVLinkProtocol::getLogfileName()
     return QCoreApplication::applicationDirPath()+"/mavlink.log";
 }
 
-/**
- * The bytes are copied by calling the LinkInterface::readBytes() method.
- * This method parses all incoming bytes and constructs a MAVLink packet.
- * It can handle multiple links in parallel, as each link has it's own buffer/
- * parsing state machine.
- * @param link The interface to read from
- * @see LinkInterface
- **/
 void MAVLinkProtocol::receiveBytes(LinkInterface* link)
 {
-    receiveMutex.lock();
     // Prepare buffer
     static const int maxlen = 4096 * 100;
     static char buffer[maxlen];
-    qint64 bytesToRead = link->bytesAvailable();
+
+    receiveMutex.lock();
 
     // Get all data at once, let link read the bytes in the buffer array
-    link->readBytes(buffer, maxlen);
+    qint64 bytesReaded = link->read(buffer, maxlen);
+ 
     mavlink_message_t message;
     mavlink_status_t status;
-    for (int position = 0; position < bytesToRead; position++)
+    for (int position = 0; position < bytesReaded; position++)
     {
-        unsigned int decodeState = mavlink_parse_char(link->getId(), (uint8_t)*(buffer + position), &message, &status);
+        unsigned int decodeState = mavlink_parse_char(link->getID(), (uint8_t)*(buffer + position), &message, &status);
 
         if (decodeState == 1)
         {
@@ -290,14 +282,6 @@ void MAVLinkProtocol::receiveBytes(LinkInterface* link)
     receiveMutex.unlock();
 }
 
-/**
- * @return The name of this protocol
- **/
-QString MAVLinkProtocol::getName()
-{
-    return QString(tr("MAVLink protocol"));
-}
-
 /** @return System id of this application */
 int MAVLinkProtocol::getSystemId()
 {
@@ -341,7 +325,7 @@ void MAVLinkProtocol::sendMessage(LinkInterface* link, mavlink_message_t message
     if (link->isConnected())
     {
         // Send the portion of the buffer now occupied by the message
-        link->writeBytes((const char*)buffer, len);
+        link->write((const char*)buffer, len);
     }
 }
 
@@ -401,7 +385,7 @@ bool MAVLinkProtocol::loggingEnabled(void)
 void MAVLinkProtocol::setHeartbeatRate(int rate)
 {
     heartbeatRate = rate;
-    heartbeatTimer->setInterval(1000/heartbeatRate);
+    heartbeatTimer.setInterval(1000/heartbeatRate);
 }
 
 /** @return heartbeat rate in Hertz */

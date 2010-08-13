@@ -66,7 +66,7 @@ CommConfigurationWindow::CommConfigurationWindow(LinkInterface* link, ProtocolIn
     connect(ui.closeButton, SIGNAL(clicked()), this->window(), SLOT(close()));
     connect(ui.deleteButton, SIGNAL(clicked()), this, SLOT(remove()));
 
-    connect(this->link, SIGNAL(connected(bool)), this, SLOT(connectionState(bool)));
+    connect(this->link, SIGNAL(opened(bool)), this, SLOT(connectionState(bool)));
 
     // Fill in the current data
     if(this->link->isConnected()) ui.connectButton->setChecked(true);
@@ -148,11 +148,11 @@ void CommConfigurationWindow::setConnection()
 {
     if(!link->isConnected())
     {
-        link->connect();
+        link->open();
     }
     else
     {
-        link->disconnect();
+        link->close();
     }
 }
 

@@ -111,7 +111,7 @@ Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
     mainWindow->addLink(udpLink);
 
     // Check if link could be connected
-    if (!udpLink->connect())
+    if (!udpLink->open())
     {
         QMessageBox msgBox;
         msgBox.setIcon(QMessageBox::Critical);

@@ -62,43 +62,38 @@ public:
 
     static const int poll_interval = SERIAL_POLL_INTERVAL; ///< Polling interval, defined in configuration.h
 
-    bool isConnected();
-    qint64 bytesAvailable();
+    bool isConnected() const;
+    qint64 bytesAvailable() const;
 
     /**
      * @brief The port handle
      */
-    QString getPortName();
-    /**
-     * @brief The human readable port name
-     */
-    QString getName();
-    int getBaudRate();
-    int getBaudRateType();
-    int getFlowType();
-    int getParityType();
-    int getDataBitsType();
-    int getStopBitsType();
+    const QString& getPortName() const;
+    int getBaudRate() const;
+    int getBaudRateType() const;
+    int getFlowType() const;
+    int getParityType() const;
+    int getDataBitsType() const;
+    int getStopBitsType() const;
 
     /* Extensive statistics for scientific purposes */
-    qint64 getNominalDataRate();
-    qint64 getTotalUpstream();
-    qint64 getCurrentUpstream();
-    qint64 getMaxUpstream();
-    qint64 getTotalDownstream();
-    qint64 getCurrentDownstream();
-    qint64 getMaxDownstream();
-    qint64 getBitsSent();
-    qint64 getBitsReceived();
+    qint64 getNominalDataRate() const;
+    qint64 getTotalUpstream() const;
+    qint64 getCurrentUpstream() const;
+    qint64 getMaxUpstream() const;
+    qint64 getTotalDownstream() const;
+    qint64 getCurrentDownstream() const;
+    qint64 getMaxDownstream() const;
+    qint64 getBitsSent() const;
+    qint64 getBitsReceived() const;
 
     void run();
 
-    int getLinkQuality();
-    bool isFullDuplex();
-    int getId();
+    int getLinkQuality() const;
+    bool isFullDuplex() const;
 
 public slots:
-    bool setPortName(QString portName);
+    bool setPortName(const QString& portName);
     bool setBaudRate(int rate);
     bool setBaudRateType(int rateIndex);
     bool setFlowType(int flow);
@@ -106,16 +101,16 @@ public slots:
     bool setDataBitsType(int dataBits);
     bool setStopBitsType(int stopBits);
 
-    void readBytes(char* data, qint64 maxLength);
+    qint64 read(char* data, qint64 maxLength);
     /**
      * @brief Write a number of bytes to the interface.
      *
      * @param data Pointer to the data byte array
      * @param size The size of the bytes array
      **/
-    void writeBytes(const char* data, qint64 length);
-    bool connect();
-    bool disconnect();
+    qint64 write(const char* data, qint64 length);
+    bool open();
+    bool close();
 
 protected slots:
     void emitBytesReady();
@@ -128,14 +123,12 @@ protected:
     DCB winPortSettings;
 #endif
     QString porthandle;
-    QString name;
     BaudRateType baudrate;
     FlowType flow;
     ParityType parity;
     DataBitsType dataBits;
     StopBitsType stopBits;
     int timeout;
-    int id;
 
     quint64 bitsSentTotal;
     quint64 bitsSentShortTerm;
@@ -146,10 +139,9 @@ protected:
     quint64 bitsReceivedCurrent;
     quint64 bitsReceivedMax;
     quint64 connectionStartTime;
-    QMutex statisticsMutex;
+    mutable QMutex statisticsMutex;
     QMutex dataMutex;
 
-    void setName(QString name);
     bool hardwareConnect();
 
 signals:

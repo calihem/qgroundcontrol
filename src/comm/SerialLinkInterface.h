@@ -41,16 +41,16 @@ class SerialLinkInterface : public LinkInterface {
 	Q_OBJECT
 
 public:
-	virtual QString getPortName() = 0;
-	virtual int getBaudRate() = 0;
-	virtual int getBaudRateType() = 0;
-	virtual int getFlowType() = 0;
-	virtual int getParityType() = 0;
-	virtual int getDataBitsType() = 0;
-	virtual int getStopBitsType() = 0;
+	virtual const QString& getPortName() const = 0;
+	virtual int getBaudRate() const = 0;
+	virtual int getBaudRateType() const = 0;
+	virtual int getFlowType() const = 0;
+	virtual int getParityType() const = 0;
+	virtual int getDataBitsType() const = 0;
+	virtual int getStopBitsType() const = 0;
 
 public slots:
-	virtual bool setPortName(QString portName) = 0;
+	virtual bool setPortName(const QString& portName) = 0;
 	virtual bool setBaudRate(int rate) = 0;
 	virtual bool setBaudRateType(int rateIndex) = 0;
 	virtual bool setFlowType(int flow) = 0;

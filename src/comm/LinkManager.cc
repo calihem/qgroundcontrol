@@ -97,7 +97,7 @@ bool LinkManager::connectAll()
 	
         foreach (LinkInterface* link, links)
         {
-		if(! link->connect()) allConnected = false;
+		if(! link->open()) allConnected = false;
 	}
 	
 	return allConnected;
@@ -109,7 +109,7 @@ bool LinkManager::disconnectAll()
 	
         foreach (LinkInterface* link, links)
         {
-		if(! link->disconnect()) allDisconnected = false;
+		if(! link->close()) allDisconnected = false;
 	}
 	
 	return allDisconnected;
@@ -117,12 +117,12 @@ bool LinkManager::disconnectAll()
 
 bool LinkManager::connectLink(LinkInterface* link)
 {
-	return link->connect();
+	return link->open();
 }
 
 bool LinkManager::disconnectLink(LinkInterface* link)
 {
-	return link->disconnect();
+	return link->close();
 }
 
 /**
@@ -135,7 +135,7 @@ LinkInterface* LinkManager::getLinkForId(int id)
 {
     foreach (LinkInterface* link, links)
     {
-        if (link->getId() == id) return link;
+        if (link->getID() == id) return link;
     }
     return NULL;
 }

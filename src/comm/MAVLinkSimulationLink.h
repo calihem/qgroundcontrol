@@ -49,42 +49,40 @@ class MAVLinkSimulationLink : public LinkInterface
 public:
     MAVLinkSimulationLink(QString readFile="", QString writeFile="", int rate=5);
     ~MAVLinkSimulationLink();
-    bool isConnected();
-    qint64 bytesAvailable();
+    bool isConnected() const;
+    qint64 bytesAvailable() const;
 
     void run();
 
-    bool connect();
-    bool disconnect();
+    bool open();
+    bool close();
 
     /* Extensive statistics for scientific purposes */
-    qint64 getNominalDataRate();
-    qint64 getTotalUpstream();
-    qint64 getShortTermUpstream();
-    qint64 getCurrentUpstream();
-    qint64 getMaxUpstream();
-    qint64 getTotalDownstream();
-    qint64 getShortTermDownstream();
-    qint64 getCurrentDownstream();
-    qint64 getMaxDownstream();
-    qint64 getBitsSent();
-    qint64 getBitsReceived();
+    qint64 getNominalDataRate() const;
+    qint64 getTotalUpstream() const;
+    qint64 getShortTermUpstream() const;
+    qint64 getCurrentUpstream() const;
+    qint64 getMaxUpstream() const;
+    qint64 getTotalDownstream() const;
+    qint64 getShortTermDownstream() const;
+    qint64 getCurrentDownstream() const;
+    qint64 getMaxDownstream() const;
+    qint64 getBitsSent() const;
+    qint64 getBitsReceived() const;
 
-    QString getName();
-    int getId();
-    int getBaudRate();
-    int getBaudRateType();
-    int getFlowType();
-    int getParityType();
-    int getDataBitsType();
-    int getStopBitsType();
+    int getBaudRate() const;
+    int getBaudRateType() const;
+    int getFlowType() const;
+    int getParityType() const;
+    int getDataBitsType() const;
+    int getStopBitsType() const;
 
-    int getLinkQuality();
-    bool isFullDuplex();
+    int getLinkQuality() const;
+    bool isFullDuplex() const;
 
 public slots:
-    void writeBytes(const char* data, qint64 size);
-    void readBytes(char* const data, qint64 maxLength);
+    qint64 write(const char* data, qint64 size);
+    qint64 read(char* const data, qint64 maxLength);
     void mainloop();
     bool connectLink(bool connect);
 
@@ -108,7 +106,7 @@ protected:
     QTextStream* fileStream;
     QTextStream* outStream;
     /** Buffer which can be read from connected protocols through readBytes(). **/
-    QMutex readyBufferMutex;
+    mutable QMutex readyBufferMutex;
     bool _isConnected;
     quint64 rate;
     int maxTimeNoise;
@@ -117,8 +115,6 @@ protected:
     int readyBytes;
     QQueue<uint8_t> readyBuffer;
 
-    int id;
-    QString name;
     qint64 timeOffset;
     mavlink_sys_status_t status;
     QMap<QString, float> onboardParams;

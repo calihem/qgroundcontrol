@@ -50,67 +50,59 @@ public:
 
     static const int poll_interval = UDP_POLL_INTERVAL; ///< Polling interval, defined in configuration.h
 
-    bool isConnected();
-    qint64 bytesAvailable();
+    bool isConnected() const;
+    qint64 bytesAvailable() const;
 
-    /**
-     * @brief The human readable port name
-     */
-    QString getName();
-    int getBaudRate();
-    int getBaudRateType();
-    int getFlowType();
-    int getParityType();
-    int getDataBitsType();
-    int getStopBitsType();
+    int getBaudRate() const;
+    int getBaudRateType() const;
+    int getFlowType() const;
+    int getParityType() const;
+    int getDataBitsType() const;
+    int getStopBitsType() const;
 
     /* Extensive statistics for scientific purposes */
-    qint64 getNominalDataRate();
-    qint64 getTotalUpstream();
-    qint64 getCurrentUpstream();
-    qint64 getMaxUpstream();
-    qint64 getTotalDownstream();
-    qint64 getCurrentDownstream();
-    qint64 getMaxDownstream();
-    qint64 getBitsSent();
-    qint64 getBitsReceived();
+    qint64 getNominalDataRate() const;
+    qint64 getTotalUpstream() const;
+    qint64 getCurrentUpstream() const;
+    qint64 getMaxUpstream() const;
+    qint64 getTotalDownstream() const;
+    qint64 getCurrentDownstream() const;
+    qint64 getMaxDownstream() const;
+    qint64 getBitsSent() const;
+    qint64 getBitsReceived() const;
 
     void run();
 
-    int getLinkQuality();
-    bool isFullDuplex();
-    int getId();
+    int getLinkQuality() const;
+    bool isFullDuplex() const;
 
 public slots:
-    void setAddress(QString address);
+    void setAddress(const QString& address);
     void setPort(quint16 port);
     //    void readPendingDatagrams();
 
-    void readBytes(char* data, qint64 maxLength);
+    virtual qint64 read(char* data, qint64 maxLength);
     /**
      * @brief Write a number of bytes to the interface.
      *
      * @param data Pointer to the data byte array
      * @param size The size of the bytes array
      **/
-    void writeBytes(const char* data, qint64 length);
-    bool connect();
-    bool disconnect();
+    virtual qint64 write(const char* data, qint64 length);
+    bool open();
+    bool close();
 
 protected slots:
     void emitBytesReady();
     //void checkForBytes();
 
 protected:
-    QString name;
     QHostAddress host;
     quint16 port;
-    int id;
     QUdpSocket* socket;
     bool connectState;
-    QList<QHostAddress>* hosts;
-    //    QMap<QHostAddress, quint16>* ports;
-    QList<quint16>* ports;
+    QList<QHostAddress> hosts;
+    QList<quint16> ports;
 
     quint64 bitsSentTotal;
     quint64 bitsSentCurrent;
@@ -119,10 +111,8 @@ protected:
     quint64 bitsReceivedCurrent;
     quint64 bitsReceivedMax;
     quint64 connectionStartTime;
-    QMutex statisticsMutex;
+    mutable QMutex statisticsMutex;
     QMutex dataMutex;
-
-    void setName(QString name);
 
 signals:
     // Signals are defined by LinkInterface

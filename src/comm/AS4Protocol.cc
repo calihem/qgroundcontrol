@@ -105,7 +105,7 @@ void AS4Protocol::receiveBytes(LinkInterface* link)
     qint64 bytesToRead = link->bytesAvailable();
 
     // Get all data at once, let link read the bytes in the buffer array
-    link->readBytes(buffer, maxlen);
+    link->read(buffer, maxlen);
 //
 //    /*
 //    // Debug output

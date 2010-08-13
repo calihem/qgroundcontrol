@@ -56,8 +56,6 @@ public:
     ~MAVLinkProtocol();
 
     void run();
-    /** @brief Get the human-friendly name of this protocol */
-    QString getName();
     /** @brief Get the system id of this application */
     int getSystemId();
     /** @brief Get the component id of this application */
@@ -72,26 +70,35 @@ public:
     static QString getLogfileName();
 
 public slots:
-    /** @brief Receive bytes from a communication interface */
-    void receiveBytes(LinkInterface* link);
-    /** @brief Send MAVLink message through serial interface */
-    void sendMessage(mavlink_message_t message);
-    /** @brief Send MAVLink message through serial interface */
-    void sendMessage(LinkInterface* link, mavlink_message_t message);
-    /** @brief Set the rate at which heartbeats are emitted */
-    void setHeartbeatRate(int rate);
+	/**
+	 * @brief Receive bytes from a communication interface
+	 *
+	 * The bytes are copied by calling the LinkInterface::readBytes() method.
+	 * This method parses all incoming bytes and constructs a MAVLink packet.
+	 * It can handle multiple links in parallel, as each link has it's own buffer/
+	 * parsing state machine.
+	 * @param link The interface to read from
+	 * @see LinkInterface
+	 **/
+	void receiveBytes(LinkInterface* link);
+	/** @brief Send MAVLink message through serial interface */
+	void sendMessage(mavlink_message_t message);
+	/** @brief Send MAVLink message through serial interface */
+	void sendMessage(LinkInterface* link, mavlink_message_t message);
+	/** @brief Set the rate at which heartbeats are emitted */
+	void setHeartbeatRate(int rate);
 
-    /** @brief Enable / disable the heartbeat emission */
-    void enableHeartbeats(bool enabled);
+	/** @brief Enable / disable the heartbeat emission */
+	void enableHeartbeats(bool enabled);
 
-    /** @brief Enable/disable binary packet logging */
-    void enableLogging(bool enabled);
+	/** @brief Enable/disable binary packet logging */
+	void enableLogging(bool enabled);
 
-    /** @brief Send an extra heartbeat to all connected units */
-    void sendHeartbeat();
+	/** @brief Send an extra heartbeat to all connected units */
+	void sendHeartbeat();
 
 protected:
-    QTimer* heartbeatTimer;    ///< Timer to emit heartbeats
+    QTimer heartbeatTimer;    ///< Timer to emit heartbeats
     int heartbeatRate;         ///< Heartbeat rate, controls the timer interval
     bool m_heartbeatsEnabled;  ///< Enabled/disable heartbeat emission
     bool m_loggingEnabled;     ///< Enable/disable packet logging

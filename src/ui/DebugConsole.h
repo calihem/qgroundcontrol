@@ -53,11 +53,11 @@ public slots:
     /** @brief Add a link to the list of monitored links */
     void addLink(LinkInterface* link);
     /** @brief Update a link name */
-    void updateLinkName(QString name);
+    void updateLinkName(const QString& name);
     /** @brief Select a link for the active view */
     void linkSelected(int linkId);
     /** @brief Receive bytes from link */
-    void receiveBytes(LinkInterface* link, QByteArray bytes);
+    void receiveBytes(LinkInterface* link, const QByteArray bytes);
     /** @brief Send lineedit content over link */
     void sendBytes();
     /** @brief Enable HEX display mode */

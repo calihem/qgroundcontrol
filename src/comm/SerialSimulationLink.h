@@ -54,38 +54,38 @@ public:
         SerialSimulationLink(QFile* inputFile=NULL, QFile* outputFile=NULL, int sendrate=20);
 	~SerialSimulationLink();
 
-	bool isConnected();
-	qint64 bytesAvailable();
+	bool isConnected() const;
+	qint64 bytesAvailable() const;
 
 	void run();
 
 	/* Extensive statistics for scientific purposes */
-	qint64 getNominalDataRate();
-	qint64 getTotalUpstream();
-	qint64 getShortTermUpstream();
-	qint64 getCurrentUpstream();
-	qint64 getMaxUpstream();
-	qint64 getTotalDownstream();
-	qint64 getShortTermDownstream();
-	qint64 getCurrentDownstream();
-	qint64 getMaxDownstream();
-	qint64 getBitsSent();
-	qint64 getBitsReceived();
+	qint64 getNominalDataRate() const;
+	qint64 getTotalUpstream() const;
+	qint64 getShortTermUpstream() const;
+	qint64 getCurrentUpstream() const;
+	qint64 getMaxUpstream() const;
+	qint64 getTotalDownstream() const;
+	qint64 getShortTermDownstream() const;
+	qint64 getCurrentDownstream() const;
+	qint64 getMaxDownstream() const;
+	qint64 getBitsSent() const;
+	qint64 getBitsReceived() const;
 
 	void enableLoopBackMode(SerialLink* loop);
-	QString getPortName();
-	int getBaudRate();
-	int getBaudRateType();
-	int getFlowType();
-	int getParityType();
-	int getDataBitsType();
-	int getStopBitsType();
+	virtual const QString& getPortName() const;
+	int getBaudRate() const;
+	int getBaudRateType() const;
+	int getFlowType() const;
+	int getParityType() const;
+	int getDataBitsType() const;
+	int getStopBitsType() const;
 
-	int getLinkQuality();
-	bool isFullDuplex();
+	int getLinkQuality() const;
+	bool isFullDuplex() const;
 
 public slots:
-	bool setPortName(QString portName);
+	bool setPortName(const QString& portName);
 	bool setBaudRateType(int rateIndex);
 	bool setBaudRate(int rate);
 	bool setFlowType(int flow);
@@ -94,16 +94,17 @@ public slots:
 	bool setStopBitsType(int stopBits);
 
 	void readLine();
-        void writeBytes(char *bytes, qint64 length);
-	void readBytes(char *bytes, qint64 maxLength);
+        qint64 write(char *bytes, qint64 length);
+	qint64 read(char *bytes, qint64 maxLength);
 
-	bool connect();
-	bool disconnect();
+	bool open();
+	bool close();
 
 	void setMaximumTimeNoise(int milliseconds);
 
 protected:
-	QTimer* timer;
+	QString portName;
+	QTimer timer;
 	SerialLink* loopBack;
 	/** File which contains the input data (simulated robot messages) **/
 	QFile* simulationFile;
@@ -116,7 +117,7 @@ protected:
 	QByteArray lineBuffer;
 	/** Buffer which can be read from connected protocols through readBytes(). **/
 	QByteArray readyBuffer;
-	QMutex readyBufferMutex;
+	mutable QMutex readyBufferMutex;
 	bool _isConnected;
 	quint64 rate;
 	int maxTimeNoise;

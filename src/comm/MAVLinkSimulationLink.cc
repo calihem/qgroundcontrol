@@ -56,13 +56,11 @@ This file is part of the PIXHAWK project
  * @param rate The rate at which the messages are sent (in intervals of milliseconds)
  **/
 MAVLinkSimulationLink::MAVLinkSimulationLink(QString readFile, QString writeFile, int rate) :
+	_isConnected(false),
+	rate(rate),
         readyBytes(0),
         timeOffset(0)
 {
-    this->rate = rate;
-    _isConnected = false;
-
-    onboardParams = QMap<QString, float>();
     onboardParams.insert("PID_ROLL_K_P", 0.5f);
     onboardParams.insert("PID_PITCH_K_P", 0.5f);
     onboardParams.insert("PID_YAW_K_P", 0.5f);
@@ -93,7 +91,6 @@ MAVLinkSimulationLink::MAVLinkSimulationLink(QString readFile, QString writeFile
     // Initialize the pseudo-random number generator
     srand(QTime::currentTime().msec());
     maxTimeNoise = 0;
-    this->id = getNextLinkId();
     LinkManager::instance()->add(this);
 
     // Open packet log
@@ -542,7 +539,7 @@ void MAVLinkSimulationLink::mainloop()
 }
 
 
-qint64 MAVLinkSimulationLink::bytesAvailable()
+qint64 MAVLinkSimulationLink::bytesAvailable() const
 {
     readyBufferMutex.lock();
     qint64 size = readyBuffer.size();
@@ -550,7 +547,7 @@ qint64 MAVLinkSimulationLink::bytesAvailable()
     return size;
 }
 
-void MAVLinkSimulationLink::writeBytes(const char* data, qint64 size)
+qint64 MAVLinkSimulationLink::write(const char* data, qint64 size)
 {
     qDebug() << "Simulation received " << size << " bytes from groundstation: ";
 
@@ -746,10 +743,11 @@ void MAVLinkSimulationLink::writeBytes(const char* data, qint64 size)
     // Update comm status
     status.packet_drop = comm.packet_rx_drop_count;
 
+    return size;
 }
 
 
-void MAVLinkSimulationLink::readBytes(char* const data, qint64 maxLength) {
+qint64 MAVLinkSimulationLink::read(char* const data, qint64 maxLength) {
     // Lock concurrent resource readyBuffer
     readyBufferMutex.lock();
     qint64 len = maxLength;
@@ -781,6 +779,7 @@ void MAVLinkSimulationLink::readBytes(char* const data, qint64 maxLength) {
     //        }
     //        fprintf(stderr,"\n");
     //    }
+    return len;
 }
 
 /**
@@ -789,14 +788,14 @@ void MAVLinkSimulationLink::readBytes(char* const data, qint64 maxLength) {
  * @return True if connection has been disconnected, false if connection
  * couldn't be disconnected.
  **/
-bool MAVLinkSimulationLink::disconnect() {
+bool MAVLinkSimulationLink::close() {
 
     if(isConnected()) {
         //        timer->stop();
 
         _isConnected = false;
 
-        emit disconnected();
+        emit closed();
 
         //exit();
     }
@@ -810,12 +809,14 @@ bool MAVLinkSimulationLink::disconnect() {
  * @return True if connection has been established, false if connection
  * couldn't be established.
  **/
-bool MAVLinkSimulationLink::connect()
+bool MAVLinkSimulationLink::open()
 {
     _isConnected = true;
 
     start(LowPriority);
     //    timer->start(rate);
+    
+    emit opened();
     return true;
 }
 
@@ -832,7 +833,7 @@ bool MAVLinkSimulationLink::connectLink(bool connect)
 
     if(connect)
     {
-        this->connect();
+        this->open();
     }
 
     return true;
@@ -843,73 +844,63 @@ bool MAVLinkSimulationLink::connectLink(bool connect)
  *
  * @return True if link is connected, false otherwise.
  **/
-bool MAVLinkSimulationLink::isConnected() {
+bool MAVLinkSimulationLink::isConnected() const {
     return _isConnected;
 }
 
-int MAVLinkSimulationLink::getId()
-{
-    return id;
-}
-
-QString MAVLinkSimulationLink::getName()
-{
-    return name;
-}
-
-qint64 MAVLinkSimulationLink::getNominalDataRate() {
+qint64 MAVLinkSimulationLink::getNominalDataRate() const {
     /* 100 Mbit is reasonable fast and sufficient for all embedded applications */
     return 100000000;
 }
 
-qint64 MAVLinkSimulationLink::getTotalUpstream() {
+qint64 MAVLinkSimulationLink::getTotalUpstream() const {
     return 0;
     //TODO Add functionality here
     // @todo Add functionality here
 }
 
-qint64 MAVLinkSimulationLink::getShortTermUpstream() {
+qint64 MAVLinkSimulationLink::getShortTermUpstream() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getCurrentUpstream() {
+qint64 MAVLinkSimulationLink::getCurrentUpstream() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getMaxUpstream() {
+qint64 MAVLinkSimulationLink::getMaxUpstream() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getBitsSent() {
+qint64 MAVLinkSimulationLink::getBitsSent() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getBitsReceived() {
+qint64 MAVLinkSimulationLink::getBitsReceived() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getTotalDownstream() {
+qint64 MAVLinkSimulationLink::getTotalDownstream() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getShortTermDownstream() {
+qint64 MAVLinkSimulationLink::getShortTermDownstream() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getCurrentDownstream() {
+qint64 MAVLinkSimulationLink::getCurrentDownstream() const {
     return 0;
 }
 
-qint64 MAVLinkSimulationLink::getMaxDownstream() {
+qint64 MAVLinkSimulationLink::getMaxDownstream() const {
     return 0;
 }
 
-bool MAVLinkSimulationLink::isFullDuplex() {
+bool MAVLinkSimulationLink::isFullDuplex() const {
     /* Full duplex is no problem when running in pure software, but this is a serial simulation */
     return false;
 }
 
-int MAVLinkSimulationLink::getLinkQuality() {
+int MAVLinkSimulationLink::getLinkQuality() const {
     /* The Link quality is always perfect when running in software */
     return 100;
 }

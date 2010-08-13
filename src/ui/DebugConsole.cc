@@ -116,14 +116,14 @@ DebugConsole::~DebugConsole()
 void DebugConsole::addLink(LinkInterface* link)
 {
     // Add link to link list
-    links.insert(link->getId(), link);
+    links.insert(link->getID(), link);
 
-    m_ui->linkComboBox->insertItem(link->getId(), link->getName());
+    m_ui->linkComboBox->insertItem(link->getID(), link->getName());
     // Set new item as current
     m_ui->linkComboBox->setCurrentIndex(qMax(0, links.size() - 1));
 
     // Register for name changes
-    connect(link, SIGNAL(nameChanged(QString)), this, SLOT(updateLinkName(QString)));
+    connect(link, SIGNAL(nameChanged(const QString&)), this, SLOT(updateLinkName(const QString&)));
 }
 
 void DebugConsole::linkSelected(int linkId)
@@ -138,17 +138,18 @@ void DebugConsole::linkSelected(int linkId)
 
     // Connect new link
     currLink = links[linkId];
-    connect(currLink, SIGNAL(bytesReceived(LinkInterface*,QByteArray)), this, SLOT(receiveBytes(LinkInterface*, QByteArray)));
+    connect(currLink, SIGNAL(bytesReceived(LinkInterface*, const QByteArray&)),
+	    this, SLOT(receiveBytes(LinkInterface*, const QByteArray&)));
 }
 
 /**
  * @param name new name for this link - the link is determined to the sender to this slot by QObject::sender()
  */
-void DebugConsole::updateLinkName(QString name)
+void DebugConsole::updateLinkName(const QString& name)
 {
     // Set name if signal came from a link
     LinkInterface* link = qobject_cast<LinkInterface*>(sender());
-    if (link != NULL) m_ui->linkComboBox->setItemText(link->getId(), name);
+    if (link != NULL) m_ui->linkComboBox->setItemText(link->getID(), name);
 }
 
 void DebugConsole::setAutoHold(bool hold)
@@ -226,7 +227,7 @@ void DebugConsole::paintEvent(QPaintEvent *event)
     }
 }
 
-void DebugConsole::receiveBytes(LinkInterface* link, QByteArray bytes)
+void DebugConsole::receiveBytes(LinkInterface* link, const QByteArray bytes)
 {
     snapShotBytes += bytes.size();
     // Only add date from current link
@@ -354,7 +355,7 @@ void DebugConsole::sendBytes()
     if (ok && m_ui->sendText->text().toLatin1().size() > 0)
     {
         // Transmit only if conversion succeeded
-        currLink->writeBytes(transmit, transmit.size());
+        currLink->write(transmit, transmit.size());
         m_ui->sentText->setText(tr("Sent: ") + feedback);
     }
     else if (m_ui->sendText->text().toLatin1().size() > 0)

@@ -33,6 +33,7 @@ This file is part of the PIXHAWK project
 #define _LINKINTERFACE_H_
 
 #include <QThread>
+#include <QMetaType>
 
 /**
  * The link interface defines the interface for all links used to communicate
@@ -207,7 +208,7 @@ public slots:
 	 * @param length The length of the data array
 	 * @return The number of written bytes
 	 **/
-	virtual qint64 writeBytes(const char *bytes, qint64 length) = 0;
+	virtual qint64 write(const char *bytes, qint64 length) = 0;
 
 	/**
 	 * @brief Read a number of bytes from the interface.
@@ -216,15 +217,15 @@ public slots:
 	 * @param maxLength The maximum length which can be written
 	 * @return The number of readed bytes
 	 **/
-	virtual qint64 readBytes(char *bytes, qint64 maxLength) = 0;
+	virtual qint64 read(char *bytes, qint64 maxLength) = 0;
 
 signals:
 	/**
 	 * @brief This signal is emitted when new data is ready to read in the queue
 	 *
-	 * @param linkID The ID of the link to read from
+	 * @param link The link to read from
 	 **/
-	void bytesReady(int linkID);
+	void bytesReady(LinkInterface *link);
 
         /**
          * @brief New data arrived
@@ -233,7 +234,7 @@ signals:
          *
          * @param data the new bytes
          */
-        void bytesReceived(int linkID, const QByteArray &data);
+        void bytesReceived(LinkInterface *link, const QByteArray &data);
 
 	/**
 	 * @brief This signal is emitted instantly when the link is connected
@@ -258,7 +259,7 @@ signals:
 protected:
 	int id;
 	QString name;
-
+	
 };
 
 // ----------------------------------------------------------------------------

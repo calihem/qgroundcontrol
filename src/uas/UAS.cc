@@ -594,7 +594,7 @@ void UAS::sendMessage(LinkInterface* link, mavlink_message_t message)
     if (link->isConnected())
     {
         // Send the portion of the buffer now occupied by the message
-        link->writeBytes((const char*)buffer, len);
+        link->write((const char*)buffer, len);
     }
 }
 
