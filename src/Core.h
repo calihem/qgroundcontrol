@@ -36,9 +36,6 @@ This file is part of the PIXHAWK project
 #include <QApplication>
 
 #include "MainWindow.h"
-#include "UASManager.h"
-#include "LinkManager.h"
-/*#include "ViconTarsusProtocol.h" */
 
 /**
  * @brief The main application and management class.
@@ -53,13 +50,15 @@ class Core : public QApplication
 
 public:
         Core(int &argc, char* argv[]);
+	/**
+	* @brief Destructor for the groundstation. It destroys all loaded instances.
+	*
+	**/
         ~Core();
 
 protected:
-	void startLinkManager();
-
         /**
-         * @brief Start the robot managing system
+         * @brief Start the Unmanned Air System Manager
          *
          * The robot manager keeps track of the configured robots.
          **/
@@ -67,7 +66,6 @@ protected:
 
 private:
         MainWindow* mainWindow;
-        //ViconTarsusProtocol* tarsus;
 };
 
 #endif /* _CORE_H_ */

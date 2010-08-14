@@ -46,8 +46,11 @@ This file is part of the PIXHAWK project
 #include "MainWindow.h"
 #include "GAudioOutput.h"
 
+#include "ProtocolStack.h"
 #include "UDPLink.h"
 #include "MAVLinkSimulationLink.h"
+
+#include "UASManager.h"
 
 
 /**
@@ -62,107 +65,82 @@ This file is part of the PIXHAWK project
 
 Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
 {
-    this->setApplicationName(QGC_APPLICATION_NAME);
-    this->setApplicationVersion(QGC_APPLICATION_VERSION);
-    this->setOrganizationName(QLatin1String("PIXHAWK Association Zurich"));
-    this->setOrganizationDomain("http://qgroundcontrol.org");
+	setApplicationName(QGC_APPLICATION_NAME);
+	setApplicationVersion(QGC_APPLICATION_VERSION);
+	setOrganizationName(QLatin1String("PIXHAWK Association Zurich"));
+	setOrganizationDomain("http://qgroundcontrol.org");
 
-    // Show splash screen
-    QPixmap splashImage(":images/splash.png");
-    QSplashScreen* splashScreen = new QSplashScreen(splashImage, Qt::WindowStaysOnTopHint);
-    splashScreen->show();
-    splashScreen->showMessage(tr("Loading application fonts"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+	QSettings::setDefaultFormat(QSettings::IniFormat);
+	// Exit main application when last window is closed
+	connect(this, SIGNAL(lastWindowClosed()), this, SLOT(quit()));
 
-    QSettings::setDefaultFormat(QSettings::IniFormat);
-    // Exit main application when last window is closed
-    connect(this, SIGNAL(lastWindowClosed()), this, SLOT(quit()));
+	// Show splash screen
+	QPixmap splashImage(":images/splash.png");
+	QSplashScreen splashScreen(splashImage, Qt::WindowStaysOnTopHint);
+	splashScreen.show();
+	splashScreen.showMessage(tr("Loading application fonts"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
 
-    // Set application font
-    QFontDatabase fontDatabase = QFontDatabase();
-    const QString fontFileName = ":/general/vera.ttf"; ///< Font file is part of the QRC file and compiled into the app
-    const QString fontFamilyName = "Bitstream Vera Sans";
-    if(!QFile::exists(fontFileName)) printf("ERROR! font file: %s DOES NOT EXIST!\n", fontFileName.toStdString().c_str());
-    fontDatabase.addApplicationFont(fontFileName);
-    setFont(fontDatabase.font(fontFamilyName, "Roman", 12));
+	// Set application font
+	QFontDatabase fontDatabase = QFontDatabase();
+	const QString fontFileName = ":/general/vera.ttf"; ///< Font file is part of the QRC file and compiled into the app
+	const QString fontFamilyName = "Bitstream Vera Sans";
+	if( !QFile::exists(fontFileName) )
+		qDebug() << "ERROR! font file: " << fontFileName << " DOES NOT EXIST!";
+	fontDatabase.addApplicationFont(fontFileName);
+	setFont(fontDatabase.font(fontFamilyName, "Roman", 12));
 
-    // Start the comm link manager
-    splashScreen->showMessage(tr("Starting Communication Links"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
-    startLinkManager();
+	// Start the comm link manager
+	splashScreen.showMessage(tr("Starting Communication Links"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+	// Build udp link
+	UDPLink* udpLink = new UDPLink(QHostAddress::Any, 14550);
+	ProtocolStack::instance().addLink(udpLink);
+	ProtocolStack::instance().registerProtocol(udpLink->getID(), ProtocolStack::MAVLinkProtocol);
+	// Connect udp link to ensure that all components are initialized when the first messages arrive
+	if (!udpLink->open())
+	{
+		QMessageBox msgBox;
+		msgBox.setIcon(QMessageBox::Critical);
+		msgBox.setText("Could not connect UDP port. Is an instance of " + qAppName() + "already running?");
+		msgBox.setInformativeText("You will not be able to receive data via UDP. Please check that you're running the right executable and then re-start " + qAppName() + ". Do you want to close the application?");
+		msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+		msgBox.setDefaultButton(QMessageBox::Cancel);
+		int ret = msgBox.exec();
 
-    // Start the UAS Manager
-    splashScreen->showMessage(tr("Starting UAS Manager"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
-    startUASManager();
+		// Close the message box shortly after the click to prevent accidental clicks
+		QTimer::singleShot(5000, &msgBox, SLOT(reject()));
 
-    //tarsus = new ViconTarsusProtocol();
-    //tarsus->start();
+		// Exit application
+		if (ret == QMessageBox::Yes)
+		{
+		//mainWindow->close();
+		QTimer::singleShot(200, mainWindow, SLOT(close()));
+		}
+	}
 
-    // Start the user interface
-    splashScreen->showMessage(tr("Starting User Interface"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
-    // Start UI
-    mainWindow = new MainWindow();
+	// Build simulation link
+	MAVLinkSimulationLink* simulationLink = new MAVLinkSimulationLink(":/demo-log.txt");
+	ProtocolStack::instance().addLink(simulationLink);
+	ProtocolStack::instance().registerProtocol(simulationLink->getID(), ProtocolStack::MAVLinkProtocol);
 
-    // Remove splash screen
-    splashScreen->finish(mainWindow);
+	// Start the UAS Manager
+	splashScreen.showMessage(tr("Starting UAS Manager"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+	startUASManager();
 
-    // Connect links
-    // to make sure that all components are initialized when the
-    // first messages arrive
-    UDPLink* udpLink = new UDPLink(QHostAddress::Any, 14550);
-    mainWindow->addLink(udpLink);
+	// Start the user interface
+	splashScreen.showMessage(tr("Starting User Interface"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+	// Start UI
+	mainWindow = new MainWindow();
 
-    // Check if link could be connected
-    if (!udpLink->open())
-    {
-        QMessageBox msgBox;
-        msgBox.setIcon(QMessageBox::Critical);
-        msgBox.setText("Could not connect UDP port. Is an instance of " + qAppName() + "already running?");
-        msgBox.setInformativeText("You will not be able to receive data via UDP. Please check that you're running the right executable and then re-start " + qAppName() + ". Do you want to close the application?");
-        msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
-        msgBox.setDefaultButton(QMessageBox::Cancel);
-        int ret = msgBox.exec();
-
-        // Close the message box shortly after the click to prevent accidental clicks
-        QTimer::singleShot(5000, &msgBox, SLOT(reject()));
-
-        // Exit application
-        if (ret == QMessageBox::Yes)
-        {
-            //mainWindow->close();
-            QTimer::singleShot(200, mainWindow, SLOT(close()));
-        }
-    }
-
-    // MAVLinkSimulationLink* simulationLink = new MAVLinkSimulationLink(MG::DIR::getSupportFilesDirectory() + "/demo-log.txt");
-    MAVLinkSimulationLink* simulationLink = new MAVLinkSimulationLink(":/demo-log.txt");
-    mainWindow->addLink(simulationLink);
+	// Remove splash screen
+	splashScreen.finish(mainWindow);
 }
 
-/**
- * @brief Destructor for the groundstation. It destroys all loaded instances.
- *
- **/
 Core::~Core()
 {
     // Delete singletons
-    delete LinkManager::instance();
     delete UASManager::instance();
 }
 
-/**
- * @brief Start the link managing component.
- *
- * The link manager keeps track of all communication links and provides the global
- * packet queue. It is the main communication hub
- **/
-void Core::startLinkManager()
-{
-    LinkManager::instance();
-}
-
-/**
- * @brief Start the Unmanned Air System Manager
- *
- **/
 void Core::startUASManager()
 {
     // Load UAS plugins
