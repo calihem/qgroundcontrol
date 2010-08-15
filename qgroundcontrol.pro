@@ -114,7 +114,6 @@ HEADERS += src/MG.h \
     src/uas/UASInterface.h \
     src/uas/UAS.h \
     src/uas/UASManager.h \
-    src/comm/LinkManager.h \
     src/comm/ProtocolStack.h \
     src/comm/LinkInterface.h \
     src/comm/SerialLinkInterface.h \
@@ -177,7 +176,6 @@ SOURCES += src/main.cc \
     src/Core.cc \
     src/uas/UASManager.cc \
     src/uas/UAS.cc \
-    src/comm/LinkManager.cc \
     src/comm/ProtocolStack.cc \
     src/comm/SerialLink.cc \
     src/comm/SerialSimulationLink.cc \

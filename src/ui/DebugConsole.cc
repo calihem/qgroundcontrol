@@ -32,7 +32,7 @@ This file is part of the PIXHAWK project
 
 #include "DebugConsole.h"
 #include "ui_DebugConsole.h"
-#include "LinkManager.h"
+#include "ProtocolStack.h"
 #include "protocol.h"
 
 #include <QDebug>
@@ -82,15 +82,16 @@ DebugConsole::DebugConsole(QWidget *parent) :
     m_ui->mavlinkCheckBox->setChecked(filterMAVLINK);
     m_ui->holdCheckBox->setChecked(autoHold);
 
-    // Get a list of all existing links
-    links = QList<LinkInterface*>();
-    foreach (LinkInterface* link, LinkManager::instance()->getLinks())
+    // Get a list of all existing link IDs
+    QList<int> linkIDs( ProtocolStack::instance().getLinkIDs() );
+    foreach (int linkID, linkIDs)
     {
-        addLink(link);
+        addLink(linkID);
     }
 
     // Connect to link manager to get notified about new links
-    connect(LinkManager::instance(), SIGNAL(newLink(LinkInterface*)), this, SLOT(addLink(LinkInterface*)));
+    connect(&ProtocolStack::instance(), SIGNAL(linkAdded(int)), this, SLOT(addLink(int)));
+    //TODO Get notified about removed links 
     // Connect link combo box
     connect(m_ui->linkComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(linkSelected(int)));
     // Connect send button
@@ -113,12 +114,15 @@ DebugConsole::~DebugConsole()
 /**
  * Add a link to the debug console output
  */
-void DebugConsole::addLink(LinkInterface* link)
+void DebugConsole::addLink(int linkID)
 {
+    LinkInterface *link = ProtocolStack::instance().getLink(linkID);
+    if (!link) return;
+    
     // Add link to link list
-    links.insert(link->getID(), link);
+    links.insert(linkID, linkID);
 
-    m_ui->linkComboBox->insertItem(link->getID(), link->getName());
+    m_ui->linkComboBox->insertItem(linkID, link->getName());
     // Set new item as current
     m_ui->linkComboBox->setCurrentIndex(qMax(0, links.size() - 1));
 
@@ -137,7 +141,8 @@ void DebugConsole::linkSelected(int linkId)
     m_ui->receiveText->clear();
 
     // Connect new link
-    currLink = links[linkId];
+    currLink = ProtocolStack::instance().getLink(linkId);
+    if (!currLink) return;
     connect(currLink, SIGNAL(bytesReceived(LinkInterface*, const QByteArray&)),
 	    this, SLOT(receiveBytes(LinkInterface*, const QByteArray&)));
 }

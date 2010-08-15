@@ -51,7 +51,7 @@ public:
 
 public slots:
     /** @brief Add a link to the list of monitored links */
-    void addLink(LinkInterface* link);
+    void addLink(int linkID);
     /** @brief Update a link name */
     void updateLinkName(const QString& name);
     /** @brief Select a link for the active view */
@@ -80,7 +80,7 @@ public slots:
 protected:
     void changeEvent(QEvent *e);
 
-    QList<LinkInterface*> links;
+    QList<int> links;
     LinkInterface* currLink;
 
     bool holdOn;              ///< Hold current view, ignore new data

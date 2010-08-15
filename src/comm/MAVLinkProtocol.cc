@@ -47,7 +47,7 @@ This file is part of the PIXHAWK project
 #include "PxQuadMAV.h"
 #include "ArduPilotMAV.h"
 #include "configuration.h"
-#include "LinkManager.h"
+#include "ProtocolStack.h"
 #include <mavlink.h>
 #include "QGC.h"
 
@@ -300,14 +300,13 @@ int MAVLinkProtocol::getComponentId()
 void MAVLinkProtocol::sendMessage(mavlink_message_t message)
 {
     // Get all links connected to this unit
-    QList<LinkInterface*> links = LinkManager::instance()->getLinksForProtocol(this);
+    QList<int> linkIDs = ProtocolStack::instance().getLinkIDs(ProtocolStack::MAVLinkProtocol);
 
     // Emit message on all links that are currently connected
-    QList<LinkInterface*>::iterator i;
-    for (i = links.begin(); i != links.end(); ++i)
+    QList<int>::iterator i;
+    for (i = linkIDs.begin(); i != linkIDs.end(); ++i)
     {
         sendMessage(*i, message);
-        qDebug() << __FILE__ << __LINE__ << "SENT HEARTBEAT MESSAGE OVER" << ((LinkInterface*)*i)->getName() << "LIST SIZE:" << links.size();
     }
 }
 
@@ -315,8 +314,11 @@ void MAVLinkProtocol::sendMessage(mavlink_message_t message)
  * @param link the link to send the message over
  * @param message message to send
  */
-void MAVLinkProtocol::sendMessage(LinkInterface* link, mavlink_message_t message)
+void MAVLinkProtocol::sendMessage(int linkID, mavlink_message_t message)
 {
+    LinkInterface *link = ProtocolStack::instance().getLink(linkID);
+    if (!link) return;
+
     // Create buffer
     uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
     // Write message into buffer, prepending start sign

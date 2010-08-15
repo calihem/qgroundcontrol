@@ -84,7 +84,7 @@ public slots:
 	/** @brief Send MAVLink message through serial interface */
 	void sendMessage(mavlink_message_t message);
 	/** @brief Send MAVLink message through serial interface */
-	void sendMessage(LinkInterface* link, mavlink_message_t message);
+	void sendMessage(int linkID, mavlink_message_t message);
 	/** @brief Set the rate at which heartbeats are emitted */
 	void setHeartbeatRate(int rate);
 

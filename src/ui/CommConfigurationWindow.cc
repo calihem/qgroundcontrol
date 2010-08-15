@@ -24,166 +24,322 @@ This file is part of the PIXHAWK project
 
 /**
  * @file
- *   @brief Implementation of configuration window for serial links
+ *   @brief Implementation of configuration window for communication links
  *
  *   @author Lorenz Meier <mavteam@student.ethz.ch>
+ *   @author Michael Schulz <coding@calihem.de>
  *
+ *   @sa CommConfigurationWindow.h
  */
 
 #include <QDebug>
 
-#include <QDir>
-#include <QFileInfoList>
 #include <QBoxLayout>
 #include <QWidget>
 
 #include "CommConfigurationWindow.h"
+#include "SerialLink.h"
 #include "SerialConfigurationWindow.h"
-#include "SerialLinkInterface.h"
 #include "UDPLink.h"
+#include "MAVLinkSimulationLink.h"
 #include "MAVLinkProtocol.h"
 #include "MAVLinkSettingsWidget.h"
 
-CommConfigurationWindow::CommConfigurationWindow(LinkInterface* link, ProtocolInterface* protocol, QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags)
+CommConfigurationWindow::CommConfigurationWindow(LinkInterface* link, ProtocolInterface* protocol, QWidget *parent, Qt::WindowFlags flags) :
+	QWidget(parent, flags),
+	typeLinkPair( ProtocolStack::getLinkType(link), link),
+	typeProtocolPair( ProtocolStack::getProtocolType(protocol), protocol)
 {
-    this->link = link;
+	//set up default UI
+	ui.setupUi(this);
 
-    // Setup the user interface according to link type
-    ui.setupUi(this);
+	// add needed layouts to groupbox (Is it possible to do it in Qt designer?)
+	linkLayout = new QBoxLayout(QBoxLayout::LeftToRight, ui.linkGroupBox);
+	protocolLayout = new QBoxLayout(QBoxLayout::LeftToRight, ui.protocolGroupBox);
 
-    // Create action to open this menu
-    // Create configuration action for this link
-    // Connect the current UAS
-    action = new QAction(QIcon(":/images/devices/network-wireless.svg"), "", link);
-    setLinkName(link->getName());
-    connect(action, SIGNAL(triggered()), this, SLOT(show()));
+	// if necessary create new link
+	bool newLink = false;
+	if (!typeLinkPair.second)
+	{ // create new link
+		if ( createLink((ProtocolStack::LinkType)ui.linkType->currentIndex()) ) return;
+		newLink = true;
+	}
 
-    // Make sure that a change in the link name will be reflected in the UI
-    connect(link, SIGNAL(nameChanged(QString)), this, SLOT(setLinkName(QString)));
+	// if necessary set up new protocol
+	bool newProtocol = false;
+	if (!typeProtocolPair.second)
+	{ //create/get protocol instance
+		// is there already a protocol registered for this link?
+		typeProtocolPair.second = ProtocolStack::instance().getProtocolForLink(typeLinkPair.second->getID());
+		if (typeProtocolPair.second)
+		{ //protocol already registered
+			typeProtocolPair.first = ProtocolStack::getProtocolType(typeProtocolPair.second);
+		}
+		else
+		{ //no protocol registered so far
+			typeProtocolPair.first = (ProtocolStack::ProtocolType)ui.protocolType->currentIndex();
+			typeProtocolPair.second = ProtocolStack::instance().addProtocol(typeProtocolPair.first);
+			newProtocol = true;
+		}
+	}
+	if (!typeProtocolPair.second)
+	{ //error
+		qDebug("No protocol available");
+		// disable UI
+		setEnabled(false);
+		return;
+	}
 
-    // Setup user actions and link notifications
-    connect(ui.connectButton, SIGNAL(clicked()), this, SLOT(setConnection()));
-    connect(ui.closeButton, SIGNAL(clicked()), this->window(), SLOT(close()));
-    connect(ui.deleteButton, SIGNAL(clicked()), this, SLOT(remove()));
+	// set up UI for link and protocol
+	setupUI(typeLinkPair);
+	setupUI(typeProtocolPair);
 
-    connect(this->link, SIGNAL(opened(bool)), this, SLOT(connectionState(bool)));
+	// set the connection state
+	setConnectionState( typeLinkPair.second->isConnected() );
 
-    // Fill in the current data
-    if(this->link->isConnected()) ui.connectButton->setChecked(true);
-    //connect(this->link, SIGNAL(connected(bool)), ui.connectButton, SLOT(setChecked(bool)));
+	// switch editButton to Add or Delete
+	setupEditButton(newLink || newProtocol);
 
-    if(this->link->isConnected())
-    {
-        ui.connectionStatusLabel->setText(tr("Connected"));
+	if( !(newLink || newProtocol) )
+	{
+		// disable comboboxes
+		ui.linkType->setEnabled(false);
+		ui.protocolType->setEnabled(false);
+	}
 
-        // TODO Deactivate all settings to force user to manually disconnect first
-    }
-    else
-    {
-        ui.connectionStatusLabel->setText(tr("Disconnected"));
-    }
+	setupLinkSignals();
+	// set up ProtocolStack signals
+	connect( &ProtocolStack::instance(), SIGNAL(linkAdded(int)),
+		this, SLOT(setAddedLink(int)) );
+	connect( &ProtocolStack::instance(), SIGNAL(linkRemoved(int)),
+		this, SLOT(setRemovedLink(int)) );
+	// set up user actions
+	connect(ui.connectButton, SIGNAL(clicked()), this, SLOT(toggleConnection()));
+	connect(ui.closeButton, SIGNAL(clicked()), this->window(), SLOT(close()));
+	// set up combobox signals
+	connect( ui.linkType, SIGNAL(currentIndexChanged(int)),
+		this, SLOT(changeLink(int)) );
+	connect( ui.protocolType, SIGNAL(currentIndexChanged(int)),
+		this, SLOT(changeProtocol(int)) );
 
-    // TODO Move these calls to each link so that dynamic casts vanish
-
-    // Open details pane for serial link if necessary
-    SerialLinkInterface* serial = dynamic_cast<SerialLinkInterface*>(link);
-    if(serial != 0)
-    {
-        QWidget* conf = new SerialConfigurationWindow(serial, this);
-        QBoxLayout* layout = new QBoxLayout(QBoxLayout::LeftToRight, ui.linkGroupBox);
-        layout->addWidget(conf);
-        ui.linkGroupBox->setLayout(layout);
-        ui.linkGroupBox->setTitle(tr("serial link"));
-        //ui.linkGroupBox->setTitle(link->getName());
-        //connect(link, SIGNAL(nameChanged(QString)), ui.linkGroupBox, SLOT(setTitle(QString)));
-    }
-    else if (dynamic_cast<UDPLink*>(link) != 0)
-    {
-        ui.linkGroupBox->setTitle(tr("udp link"));
-    }
-    else
-    {
-        qDebug() << "Link is NOT a known link, can't open configuration window";
-    }
-
-    // Open details pane for MAVLink if necessary
-    MAVLinkProtocol* mavlink = dynamic_cast<MAVLinkProtocol*>(protocol);
-    if(mavlink != 0)
-    {
-        QWidget* conf = new MAVLinkSettingsWidget(mavlink, this);
-        QBoxLayout* layout = new QBoxLayout(QBoxLayout::LeftToRight, ui.protocolGroupBox);
-        layout->addWidget(conf);
-        ui.protocolGroupBox->setLayout(layout);
-        ui.protocolGroupBox->setTitle(protocol->getName());
-    }
-    else
-    {
-        qDebug() << "Protocol is NOT MAVLink, can't open configuration window";
-    }
-
-    // Open details for UDP link if necessary
-    // TODO
-
-    // Display the widget
-    this->window()->setWindowTitle(tr("Settings for ") + this->link->getName());
-    this->hide();
+	// set up window title
+	hide();
 }
 
-CommConfigurationWindow::~CommConfigurationWindow() {
-
+CommConfigurationWindow::~CommConfigurationWindow()
+{
+	if (typeLinkPair.second)
+		if ( typeLinkPair.second != ProtocolStack::instance().getLink(typeLinkPair.second->getID()) )
+		{ //link doesn't belong to ProtocolStack
+			delete typeLinkPair.second;
+		}
 }
 
-QAction* CommConfigurationWindow::getAction()
+void CommConfigurationWindow::setupUI(const ProtocolStack::TypeLinkPair &pair)
 {
-    return action;
+	if (pair.first == ProtocolStack::UnknownLink)
+	{
+		qDebug("Unknown link");
+		// disable UI
+		setEnabled(false);
+		return;
+	}
+
+	// set combobox
+	ui.linkType->setCurrentIndex(pair.first);
+	if (linkConfigWidget) delete linkConfigWidget;
+
+	// create new configuration widget
+	switch (pair.first)
+	{
+		case ProtocolStack::SerialLink:
+			linkConfigWidget = new SerialConfigurationWindow(dynamic_cast<SerialLinkInterface*>(pair.second), this);
+			linkLayout->addWidget(linkConfigWidget);
+			ui.linkGroupBox->setTitle( tr("Serial Link") );
+			break;
+		case ProtocolStack::UDPLink:
+			ui.linkGroupBox->setTitle( tr("UDP") );
+			//TODO
+			break;
+		case ProtocolStack::MAVLinkSimulationLink:
+			ui.linkGroupBox->setTitle( tr("Simulation") );
+			//TODO
+			break;
+		default:
+			ui.linkGroupBox->setTitle( tr("Link") );
+			break;
+	}
+
+	setTitle( pair.second->getName() );
 }
 
-void CommConfigurationWindow::setLinkType(int linktype)
+void CommConfigurationWindow::setupUI(const ProtocolStack::TypeProtocolPair &pair)
 {
-    // Adjust the form layout per link type
-    Q_UNUSED(linktype);
+	if (pair.first == ProtocolStack::UnknownProtocol)
+	{
+		qDebug("Unknown protocol");
+		// disable UI
+		setEnabled(false);
+		return;
+	}
+
+	// set combobox
+	ui.protocolType->setCurrentIndex(pair.first);
+
+	if (protocolConfigWidget) delete protocolConfigWidget;
+	switch (pair.first)
+	{
+		case ProtocolStack::MAVLinkProtocol:
+			protocolConfigWidget =  new MAVLinkSettingsWidget(dynamic_cast<MAVLinkProtocol*>(pair.second), this);
+			protocolLayout->addWidget(protocolConfigWidget);
+			ui.protocolGroupBox->setTitle( pair.second->getName() );
+			break;
+		default:
+			ui.protocolGroupBox->setTitle( tr("Protocol") );
+			return;
+	}
 }
 
-void CommConfigurationWindow::setConnection()
+void CommConfigurationWindow::setupEditButton(bool add)
 {
-    if(!link->isConnected())
-    {
-        link->open();
-    }
-    else
-    {
-        link->close();
-    }
+	ui.editButton->disconnect();
+	if (add)
+	{
+		ui.editButton->setText( tr("Add") );
+		connect(ui.editButton, SIGNAL(clicked()),
+			this, SLOT(addLink()));
+		//disable connect button
+		ui.connectButton->setEnabled(false);
+	}
+	else
+	{
+		ui.editButton->setText( tr("Delete") );
+		connect(ui.editButton, SIGNAL(clicked()),
+			this, SLOT(removeLink()));
+		//enable connect button
+		ui.connectButton->setEnabled(true);
+	}
 }
 
-void CommConfigurationWindow::setLinkName(QString name)
+void CommConfigurationWindow::setupLinkSignals()
 {
-    Q_UNUSED(name); // FIXME
-    action->setText(tr("Configure ") + link->getName());
-    action->setStatusTip(tr("Configure ") + link->getName());
-    this->window()->setWindowTitle(tr("Settings for ") + this->link->getName());
+	connect( typeLinkPair.second, SIGNAL(opened(bool)),
+		this, SLOT(setConnectionState(bool)) );
+	// make sure that a change in the link name will be reflected in the UI
+	connect(typeLinkPair.second, SIGNAL(nameChanged(const QString&)),
+		this, SLOT(setTitle(const QString&)));
 }
 
-void CommConfigurationWindow::remove()
+void CommConfigurationWindow::changeLink(int linkIndex)
 {
-    link->disconnect();
-    //delete link;
-    //delete action;
-    this->window()->close();
-    qDebug() << "TODO: Link cannot be deleted: CommConfigurationWindow::remove() NOT IMPLEMENTED!";
+	if (typeLinkPair.second)
+		if ( typeLinkPair.second != ProtocolStack::instance().getLink(typeLinkPair.second->getID()) )
+		{ //link doesn't belong to ProtocolStack
+			delete typeLinkPair.second;
+		}
+	typeLinkPair.second = NULL;
+	typeLinkPair.first = ProtocolStack::UnknownLink;
+	setWindowTitle( tr("Communication Configuration Window") );
+
+	if (linkConfigWidget)
+	{
+		linkLayout->removeWidget(linkConfigWidget);
+		delete linkConfigWidget;
+	}
+
+	// create new link 
+	if ( createLink((ProtocolStack::LinkType)linkIndex) ) return;
+	setupUI(typeLinkPair);
+
+	// set up signals of created link
+	setupLinkSignals();
 }
 
-void CommConfigurationWindow::connectionState(bool connect)
+void CommConfigurationWindow::changeProtocol(int protocolIndex)
 {
-    ui.connectButton->setChecked(connect);
-    if(connect)
-    {
-        ui.connectionStatusLabel->setText(tr("Connected"));
-        ui.connectButton->setText(tr("Disconnect"));
-    }
-    else
-    {
-        ui.connectionStatusLabel->setText(tr("Disconnected"));
-        ui.connectButton->setText(tr("Connect"));
-    }
+	typeProtocolPair.second = NULL;
+	typeProtocolPair.first = ProtocolStack::UnknownProtocol;
+
+	if (protocolConfigWidget)
+	{
+		protocolLayout->removeWidget(protocolConfigWidget);
+		delete protocolConfigWidget;
+	}
+
+	// get new protocol and set up UI
+	typeProtocolPair.first = (ProtocolStack::ProtocolType)protocolIndex;
+	typeProtocolPair.second = ProtocolStack::instance().addProtocol(typeProtocolPair.first);
+	setupUI(typeProtocolPair);
+}
+
+void CommConfigurationWindow::addLink()
+{
+	ProtocolStack::instance().addLink(typeLinkPair.second);
+	ProtocolStack::instance().registerProtocol(typeLinkPair.second->getID(), typeProtocolPair.first);
+}
+
+void CommConfigurationWindow::setAddedLink(int linkID)
+{
+	//our link?
+	if (typeLinkPair.second->getID() != linkID) return;
+
+	// set connection state
+	setConnectionState( typeLinkPair.second->isConnected() );
+	// switch editButton to Delete
+	setupEditButton(false);
+	// disable comboboxes
+	ui.linkType->setEnabled(false);
+	ui.protocolType->setEnabled(false);
+}
+
+void CommConfigurationWindow::removeLink()
+{
+	ProtocolStack::instance().removeLink( typeLinkPair.second->getID() );
+}
+
+void CommConfigurationWindow::setRemovedLink(int linkID)
+{
+	//our link?
+	if (typeLinkPair.second->getID() != linkID) return;
+	typeLinkPair.second = NULL;
+
+	// enable comboboxes
+	ui.linkType->setEnabled(true);
+	ui.protocolType->setEnabled(true);
+	// switch editButton to Add
+	setupEditButton(true);
+	// create new link and widget
+	changeLink( ui.linkType->currentIndex() );
+}
+
+
+void CommConfigurationWindow::toggleConnection()
+{
+	if ( typeLinkPair.second->isConnected() )
+		typeLinkPair.second->close();
+	else
+		typeLinkPair.second->open();
+}
+
+void CommConfigurationWindow::setConnectionState(bool connected)
+{
+	if(connected)
+	{
+		ui.connectionStatusLabel->setText( tr("Connected") );
+		ui.connectButton->setText( tr("Disconnect") );
+		ui.editButton->setEnabled(false);
+		ui.linkGroupBox->setEnabled(false);
+	}
+	else
+	{
+		ui.connectionStatusLabel->setText( tr("Disconnected") );
+		ui.connectButton->setText( tr("Connect") );
+		ui.editButton->setEnabled(true);
+		ui.linkGroupBox->setEnabled(true);
+	}
+}
+
+void CommConfigurationWindow::setTitle(const QString &linkname)
+{
+	setWindowTitle(tr("Settings for ") + linkname);
 }

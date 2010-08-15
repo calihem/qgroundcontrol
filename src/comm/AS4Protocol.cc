@@ -39,7 +39,6 @@ This file is part of the PIXHAWK project
 #include <UASInterface.h>
 #include <UAS.h>
 #include <configuration.h>
-#include <LinkManager.h>
 #include <inttypes.h>
 #include <iostream>
 

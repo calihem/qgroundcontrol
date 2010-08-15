@@ -48,10 +48,8 @@ class SerialConfigurationWindow : public QWidget
     Q_OBJECT
 
 public:
-    SerialConfigurationWindow(LinkInterface* link, QWidget *parent = 0, Qt::WindowFlags flags = Qt::Sheet);
+    SerialConfigurationWindow(SerialLinkInterface* link, QWidget *parent = 0, Qt::WindowFlags flags = Qt::Sheet);
     ~SerialConfigurationWindow();
-
-    QAction* getAction();
 
 public slots:
     void configureCommunication();
@@ -59,14 +57,8 @@ public slots:
     void setParityNone();
     void setParityOdd();
     void setParityEven();
-    void setPortName(QString port);
-    void setLinkName(QString name);
-    /**
-         * @brief Remove this link
-         *
-         * Disconnects the associated link, removes it from all menus and closes the window.
-         */
-    void remove();
+    void setPortName(const QString& port);
+    void setLinkName(const QString& name);
     void setupPortList();
 
 protected slots:
@@ -79,8 +71,7 @@ protected:
 private:
 
     Ui::serialSettings ui;
-    SerialLinkInterface* link;
-    QAction* action;
+    SerialLinkInterface* serialLink;
     QTimer* portCheckTimer;
 
 };

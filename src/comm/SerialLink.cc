@@ -33,7 +33,6 @@ This file is part of the PIXHAWK project
 #include <QDebug>
 #include <QMutexLocker>
 #include "SerialLink.h"
-#include "LinkManager.h"
 #include <MG.h>
 #ifdef _WIN32
 #include "windows.h"
@@ -280,7 +279,7 @@ bool SerialLink::hardwareConnect() {
 
     qDebug() << "Opening serial port" << porthandle;
 
-    QObject::connect(port, SIGNAL(aboutToClose()), this, SIGNAL(disconnected()));
+    QObject::connect(port, SIGNAL(aboutToClose()), this, SIGNAL(closed()));
 
     port->open(QIODevice::ReadWrite);
     port->setBaudRate(this->baudrate);

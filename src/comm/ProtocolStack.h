@@ -33,34 +33,46 @@ This file is part of the PIXHAWK project
 #ifndef _PROTOCOLSTACK_H_
 #define _PROTOCOLSTACK_H_
 
-#include <QMap>
 #include <QList>
+#include <QMap>
 #include <QPair>
+#include <QVector>
 
 #include "LinkInterface.h"
 #include "ProtocolInterface.h"
 
 /**
- * The ProtocolStack organizes the link and protocol instances. It can manage
- * arbitrary links and takes care of connecting them as well assigning the correct
- * protocol instance to transport the link data into the application.
+ * The ProtocolStack keeps track of all communication links and protocol instances.
+ * It can manage arbitrary links and takes care of connecting them as well assigning
+ * the correct protocol instance to transport the link data into the application.
  *
  **/
-/**
- * @brief Start the link managing component.
- *
- * The link manager keeps track of all communication links and provides the global
- * packet queue. It is the main communication hub
- **/
-
+// FIXME: Move enums and static methods to own class LinkFactory 
 class ProtocolStack : public QObject {
 	Q_OBJECT
 
 	public:
-		/// enums for link types
-		enum LinkType { SerialLink, UDPLink, MAVLinkSimulationLink, UnknownLink };
-		/// enums for protocol types
-		enum ProtocolType { MAVLinkProtocol, UnknownProtocol };
+		/**
+		 * @brief Enumeration of supported link types
+		 *
+		 * Links of of type LinkType can be directly created
+		 * by @class ProtocolStack.
+		 */
+		typedef enum LinkType
+		{
+			SerialLink,
+			UDPLink,
+			MAVLinkSimulationLink,
+			UnknownLink
+		} LinkType;
+		/**
+		 * @brief Enumeration of supported protocol types
+		 */
+		typedef enum ProtocolType
+		{
+			MAVLinkProtocol,
+			UnknownProtocol
+		} ProtocolType;
 		typedef QPair<LinkType, LinkInterface*> TypeLinkPair;
 		typedef QPair<ProtocolType, ProtocolInterface*> TypeProtocolPair;
 
@@ -74,16 +86,24 @@ class ProtocolStack : public QObject {
 		/// Get link instance with link ID @param linkID
 		LinkInterface* getLink(int linkID);
 		/// Returns a list of all links
+		QList<LinkInterface*> getLinks();
+		/// Returns a list of all link IDs
 		QList<int> getLinkIDs();
 		/// Returns the link type of @param link
 		static LinkType getLinkType(const LinkInterface *link);
-		/// @sa setupProtocol
+		/// Add @param protocol to ProtocolStack
 		int addProtocol(ProtocolInterface *protocol);
-		///
-		ProtocolInterface* setupProtocol(ProtocolType protocolType);
-		///
+		/// Add protocol of type @param protocolType to ProtocolStack
+		ProtocolInterface* addProtocol(ProtocolType protocolType);
+		/// Remove protocol of type @param protocolType
 		int removeProtocol(ProtocolType protocolType);
-		/// @sa setupProtocol
+		/**
+		 * \brief Get protocol for given protocol type 
+		 *
+		 * Returns protocol instance of type @param protocolType. If
+		 * no instance is available, a NULL-pointer is returned.
+		 * @sa addProtocol
+		 */
 		ProtocolInterface* getProtocol(ProtocolType protocolType);
 		/// Returns the protocol type of @param protocol
 		static ProtocolType getProtocolType(const ProtocolInterface* protocol);
@@ -123,16 +143,16 @@ class ProtocolStack : public QObject {
 		 * This class implements the singleton design pattern and has
 		 * therefore only a private constructor.
 		 */
-		ProtocolStack() {};
+		ProtocolStack();
 		~ProtocolStack();
 		ProtocolStack(const ProtocolStack &); // intentionally undefined
 		ProtocolStack& operator=(const ProtocolStack &); // intentionally undefined
 
-		/// Maps the linkID to the link instance
-		QMap<int, LinkInterface*> linkMap; //FIXME: use QVector for faster access
+		/// Vector containing all link instances
+		QVector<LinkInterface*> linkVector;
 		/// Maps the protocol type to the protocol instance
 		QMap<ProtocolType, ProtocolInterface*> protocolMap;
-		///
+		/// Maps a link to the registered protocol
 		QMap<LinkInterface*, ProtocolInterface*> linkProtocolMap;
 
 	signals:
@@ -147,11 +167,7 @@ class ProtocolStack : public QObject {
 // ----------------------------------------------------------------------------
 inline LinkInterface* ProtocolStack::getLink(int linkID)
 {
-	return linkMap.value(linkID, NULL);
-}
-inline QList<int> ProtocolStack::getLinkIDs()
-{
-	return linkMap.keys();
+	return linkVector.value(linkID, NULL);
 }
 
 inline bool ProtocolStack::connectLink(int linkID)

@@ -34,7 +34,6 @@ This file is part of the PIXHAWK project
 #include <QMutexLocker>
 #include <iostream>
 #include "UDPLink.h"
-#include "LinkManager.h"
 #include "MG.h"
 
 UDPLink::UDPLink(QHostAddress host, quint16 port) :

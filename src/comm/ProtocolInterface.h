@@ -40,9 +40,9 @@ This file is part of the PIXHAWK project
  * @brief Interface for all protocols.
  *
  * This class defines the interface for
- * communication packets transported by the LinkManager.
+ * communication packets transported by the ProtocolStack.
  * 
- * @see LinkManager.
+ * @see ProtocolStack.
  * 
  **/
 class ProtocolInterface : public QThread

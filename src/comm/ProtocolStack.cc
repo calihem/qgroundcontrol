@@ -47,6 +47,10 @@ ProtocolStack& ProtocolStack::instance()
 	return instance;
 }
 
+ProtocolStack::ProtocolStack() : linkVector(4, NULL)
+{
+}
+
 ProtocolStack::~ProtocolStack()
 {
 	// delete protocols
@@ -59,12 +63,13 @@ ProtocolStack::~ProtocolStack()
 	}
 
 	// delete links
-	QMap<int, LinkInterface*>::iterator linkIterator = linkMap.begin();
-	while ( linkIterator != linkMap.end() )
+	for (int id = 0; id < linkVector.size(); ++id)
 	{
-		emit linkRemoved( linkIterator.key() );
-		if ( linkIterator.value() ) delete linkIterator.value();
-		linkIterator = linkMap.erase(linkIterator);
+		if ( linkVector.at(id) )
+		{
+			emit linkRemoved( id );
+			delete linkVector.at(id);
+		}
 	}
 }
 
@@ -72,7 +77,22 @@ int ProtocolStack::addLink(LinkInterface *link)
 {
 	if (!link) return -1;
 
-	linkMap.insert( link->getID(), link);
+	bool foundFree = false;
+	for (int id = 0; id < linkVector.size(); ++id)
+	{ // take first free place in linkVector
+		if ( !linkVector.at(id) )
+		{
+			link->setID(id);
+			foundFree = true;
+			break;
+		}
+	}
+	if (!foundFree)
+	{ // append link to linkVector
+		link->setID( linkVector.size() );
+	}
+
+	linkVector.insert(link->getID(), link);
 	emit linkAdded( link->getID() );
 
 	return link->getID();
@@ -89,20 +109,47 @@ LinkInterface* ProtocolStack::buildLink(LinkType linkType)
 
 int ProtocolStack::removeLink(int linkID)
 {
-	QMap<int, LinkInterface*>::iterator i = linkMap.find(linkID);
-	if ( i == linkMap.end() ) //linkID not found
-	{
+	LinkInterface *link = getLink(linkID);
+	if (!link)
+	{ // no link with this ID known
 		return 1;
 	}
-	LinkInterface *link = i.value();
 
 	linkProtocolMap.remove(link);
-	linkMap.erase(i);
+	linkVector[linkID] = NULL;
 
 	emit linkRemoved(linkID);
 	delete link;
 
 	return 0;
+}
+
+QList<LinkInterface*> ProtocolStack::getLinks()
+{
+	//FIXME: improve performance
+	QList<LinkInterface*> linkList;
+	for (int i=0; i<linkVector.size(); i++)
+	{
+		if (linkVector.at(i))
+		{
+			linkList.append(linkVector.at(i));
+		}
+	}
+	return linkList;
+}
+
+QList<int> ProtocolStack::getLinkIDs()
+{
+	//FIXME: improve performance
+	QList<int> linkIDList;
+	for (int i=0; i<linkVector.size(); i++)
+	{
+		if (linkVector.at(i))
+		{
+			linkIDList.append(i);
+		}
+	}
+	return linkIDList;
 }
 
 ProtocolStack::LinkType ProtocolStack::getLinkType(const LinkInterface *link)
@@ -123,11 +170,12 @@ int ProtocolStack::connectLinks()
 {
 	int connectionCounter = 0;
 
-	foreach (LinkInterface* link, linkMap)
+	for (int id = 0; id < linkVector.size(); ++id)
 	{
-		if ( link->open() ) connectionCounter++;
+		if ( linkVector.at(id) )
+			if ( linkVector.at(id)->open() ) connectionCounter++;
 	}
-	
+
 	return connectionCounter;
 }
 
@@ -135,9 +183,10 @@ int ProtocolStack::disconnectLinks()
 {
 	int disconnectionCounter = 0;
 
-	foreach (LinkInterface* link, linkMap)
+	for (int id = 0; id < linkVector.size(); ++id)
 	{
-		if ( link->close() ) disconnectionCounter++;
+		if ( linkVector.at(id) )
+			if ( linkVector.at(id)->close() ) disconnectionCounter++;
 	}
 	
 	return disconnectionCounter;
@@ -170,7 +219,7 @@ int ProtocolStack::removeProtocol(ProtocolType protocolType)
 	return 0;
 }
 
-ProtocolInterface* ProtocolStack::setupProtocol(ProtocolType protocolType)
+ProtocolInterface* ProtocolStack::addProtocol(ProtocolType protocolType)
 {
 	ProtocolInterface *protocol = getProtocol(protocolType);
 	if (protocol) return protocol;
@@ -205,7 +254,7 @@ int ProtocolStack::registerProtocol(int linkID, ProtocolType protocolType)
 	LinkInterface *link = getLink(linkID);
 	if (!link) return -1;
 	
-	ProtocolInterface *protocol = setupProtocol(protocolType);
+	ProtocolInterface *protocol = addProtocol(protocolType);
 	if (!protocol) return -2;
 
 	linkProtocolMap.insert(link, protocol);
@@ -231,3 +280,4 @@ QList<int> ProtocolStack::getLinkIDs(ProtocolType protocolType)
 
 	return linkList;
 }
+

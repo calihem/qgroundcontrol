@@ -37,7 +37,6 @@ This file is part of the PIXHAWK project
 #include <QImage>
 #include <QDebug>
 #include "MG.h"
-#include "LinkManager.h"
 #include "MAVLinkProtocol.h"
 #include "MAVLinkSimulationLink.h"
 // MAVLINK includes
@@ -91,7 +90,6 @@ MAVLinkSimulationLink::MAVLinkSimulationLink(QString readFile, QString writeFile
     // Initialize the pseudo-random number generator
     srand(QTime::currentTime().msec());
     maxTimeNoise = 0;
-    LinkManager::instance()->add(this);
 
     // Open packet log
     mavlinkLogFile = new QFile(MAVLinkProtocol::getLogfileName());

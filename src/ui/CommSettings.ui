@@ -69,7 +69,7 @@
       </widget>
      </item>
      <item row="1" column="1">
-      <widget class="QComboBox" name="connectionType">
+      <widget class="QComboBox" name="protocolType">
        <property name="currentIndex">
         <number>0</number>
        </property>
@@ -132,9 +132,9 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="deleteButton">
+      <widget class="QPushButton" name="editButton">
        <property name="text">
-        <string>Delete</string>
+        <string>Edit</string>
        </property>
       </widget>
      </item>
