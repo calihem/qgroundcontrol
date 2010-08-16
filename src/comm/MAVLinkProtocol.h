@@ -80,7 +80,9 @@ public slots:
 	 * @param link The interface to read from
 	 * @see LinkInterface
 	 **/
-	void receiveBytes(LinkInterface* link);
+// 	void receiveBytes(LinkInterface* link);
+	virtual void handleLinkInput(int linkID, const QByteArray& data);
+
 	/** @brief Send MAVLink message through serial interface */
 	void sendMessage(mavlink_message_t message);
 	/** @brief Send MAVLink message through serial interface */

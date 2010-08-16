@@ -37,13 +37,18 @@ This file is part of the PIXHAWK project
 
 /**
  * The link interface defines the interface for all links used to communicate
- * with the groundstation application.
- *
+ * with the groundstation application. It follows an event driven approach,
+ * meaning the availabilty of new data will be automatically broadcasted through signals.
  **/
 class LinkInterface : public QThread {
 	Q_OBJECT
 public:
-	LinkInterface(int id = -1);
+	enum ReadingMode
+	{
+		AutoReading,
+		ManualReading
+	};
+	LinkInterface(int id = -1, ReadingMode readingMode = AutoReading);
 	virtual ~LinkInterface() {};
 
 	/* Connection management */
@@ -74,6 +79,26 @@ public:
 	 * @brief Set the human readable name of this link
 	 */
 	virtual void setName(const QString& name);
+
+	/**
+	 * @brief Get the reading mode of this link
+	 * @see setReadingMode
+	 */
+	virtual ReadingMode getReadingMode() const;
+
+	/**
+	 * @brief Set the reading mode of this link
+	 *
+	 * The reading mode defines the signal behavior of this link.
+	 * If set to AutoReading, the link will automatically read and
+	 * emit the data via the signal dataReceived.
+	 * If the reading mode is set to ManualReading only the signal
+	 * readyRead is emitted and the data must be fetched via read.
+	 * @see dataReceived
+	 * @see readRead
+	 * @see read
+	 */
+	virtual void setReadingMode(ReadingMode mode);
 
 	/**
 	 * @brief Determine the connection status
@@ -209,6 +234,7 @@ public slots:
 	 * @return The number of written bytes
 	 **/
 	virtual qint64 write(const char *bytes, qint64 length) = 0;
+	virtual qint64 write(const QByteArray& data);
 
 	/**
 	 * @brief Read a number of bytes from the interface.
@@ -218,6 +244,7 @@ public slots:
 	 * @return The number of readed bytes
 	 **/
 	virtual qint64 read(char *bytes, qint64 maxLength) = 0;
+	virtual qint64 read(QByteArray& data);
 
 signals:
 	/**
@@ -225,16 +252,16 @@ signals:
 	 *
 	 * @param link The link to read from
 	 **/
-	void bytesReady(LinkInterface *link);
+	void readyRead(int linkID);
 
-        /**
-         * @brief New data arrived
-         *
-         * The use of this function is discouraged for high-performance links.
-         *
-         * @param data the new bytes
-         */
-        void bytesReceived(LinkInterface *link, const QByteArray &data);
+	/**
+	 * @brief New data arrived
+	 *
+	 * The use of this function is discouraged for high-performance links.
+	 *
+	 * @param data the new bytes
+	 */
+	void dataReceived(int linkID, const QByteArray &data);
 
 	/**
 	 * @brief This signal is emitted instantly when the link is connected
@@ -251,22 +278,27 @@ signals:
 	 **/
 	void opened(bool opened);
 
-        /**
-         * @brief This signal is emitted if the human readable name of this link changes
-         */
-        void nameChanged(const QString &name);
+	/**
+	 * @brief This signal is emitted if the human readable name of this link changes
+	 */
+	void nameChanged(const QString &name);
 
 protected:
 	int id;
 	QString name;
+	ReadingMode readingMode;
+	bool loopForever;
+
 	
 };
 
 // ----------------------------------------------------------------------------
 // Inline Implementations
 // ----------------------------------------------------------------------------
-inline LinkInterface::LinkInterface(int id) :
-	id(id)
+inline LinkInterface::LinkInterface(int id, ReadingMode readingMode) :
+	id(id),
+	readingMode(readingMode),
+	loopForever(false)
 {
 }
 
@@ -291,7 +323,24 @@ inline void LinkInterface::setName(const QString& name)
 	emit nameChanged(LinkInterface::name);
 }
 
-/* Declare C++ interface as Qt interface */
-//Q_DECLARE_INTERFACE(LinkInterface, "org.openground.comm.links.LinkInterface/1.0")
+inline LinkInterface::ReadingMode LinkInterface::getReadingMode() const
+{
+	return readingMode;
+}
+
+inline void LinkInterface::setReadingMode(ReadingMode mode)
+{
+	readingMode = mode;
+}
+
+inline qint64 LinkInterface::write(const QByteArray& data)
+{
+	return write(data.data(), data.size());
+}
+
+inline qint64 LinkInterface::read(QByteArray& data)
+{
+	return read(data.data(), data.size());
+}
 
 #endif // _LINKINTERFACE_H_

@@ -73,25 +73,25 @@ public:
 	qint64 getBitsReceived() const;
 
 	void enableLoopBackMode(SerialLink* loop);
-	virtual const QString& getPortName() const;
-	int getBaudRate() const;
-	int getBaudRateType() const;
-	int getFlowType() const;
-	int getParityType() const;
-	int getDataBitsType() const;
-	int getStopBitsType() const;
+	
+		virtual const QString& getPortName() const;
+		virtual BaudRateType getBaudRate() const;
+		virtual FlowType getFlowControl() const;
+		virtual ParityType getParity() const;
+		virtual DataBitsType getDataBits() const;
+		virtual StopBitsType getStopBits() const;
+
 
 	int getLinkQuality() const;
 	bool isFullDuplex() const;
 
-public slots:
-	bool setPortName(const QString& portName);
-	bool setBaudRateType(int rateIndex);
-	bool setBaudRate(int rate);
-	bool setFlowType(int flow);
-	bool setParityType(int parity);
-	bool setDataBitsType(int dataBits);
-	bool setStopBitsType(int stopBits);
+	public slots:
+		virtual void setPortName(const QString& portName);
+		virtual void setBaudRate(BaudRateType baudrateType);
+		virtual void setFlowControl(FlowType flowType);
+		virtual void setParity(ParityType parityType);
+		virtual void setDataBits(DataBitsType dataBitsType);
+		virtual void setStopBits(StopBitsType stopBitsType);
 
 	void readLine();
         qint64 write(char *bytes, qint64 length);
@@ -131,5 +131,64 @@ signals:
 	//void bytesReady(LinkInterface *link);
 
 };
+
+inline const QString& SerialSimulationLink::getPortName() const {
+	return portName;
+}
+
+inline BaudRateType SerialSimulationLink::getBaudRate() const
+{
+	return BAUD115200;
+}
+
+inline FlowType SerialSimulationLink::getFlowControl() const
+{
+	return FLOW_OFF;
+}
+
+inline ParityType SerialSimulationLink::getParity() const
+{
+	return PAR_NONE;
+}
+
+inline DataBitsType SerialSimulationLink::getDataBits() const
+{
+	return DATA_8;
+}
+
+inline StopBitsType SerialSimulationLink::getStopBits() const
+{
+	return STOP_1;
+}
+
+inline void SerialSimulationLink::setPortName(const QString& portName)
+{
+	SerialSimulationLink::portName = portName;
+}
+
+inline void SerialSimulationLink::setBaudRate(BaudRateType baudrateType)
+{
+	Q_UNUSED(baudrateType);
+}
+
+inline void SerialSimulationLink::setFlowControl(FlowType flowType)
+{
+	Q_UNUSED(flowType);
+}
+
+inline void SerialSimulationLink::setParity(ParityType parityType)
+{
+	Q_UNUSED(parityType);
+}
+
+inline void SerialSimulationLink::setDataBits(DataBitsType dataBitsType)
+{
+	Q_UNUSED(dataBitsType);
+}
+
+inline void SerialSimulationLink::setStopBits(StopBitsType stopBitsType)
+{
+	Q_UNUSED(stopBitsType);
+}
 
 #endif // _SERIALSIMULATIONLINK_H_

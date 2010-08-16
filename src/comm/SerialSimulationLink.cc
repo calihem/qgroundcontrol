@@ -196,7 +196,8 @@ void SerialSimulationLink::readLine() {
         readyBufferMutex.unlock();
 
         if(loopBack == NULL) {
-            emit bytesReady(this);
+//             emit bytesReady(this);
+		emit readyRead(id);
         }
 
         /* (4) Read one line and save it in line buffer */
@@ -397,65 +398,3 @@ int SerialSimulationLink::getLinkQuality() const {
     return 100;
 }
 
-bool SerialSimulationLink::setPortName(const QString& portName) {
-	SerialSimulationLink::portName = portName;
-	return true;
-}
-
-bool SerialSimulationLink::setBaudRate(int rate) {
-    (void)rate; // Cast to void prevents the unused parameter warning
-    return true;
-}
-
-bool SerialSimulationLink::setFlowType(int type) {
-    (void)type; // Cast to void prevents the unused parameter warning
-    return true;
-}
-
-bool SerialSimulationLink::setParityType(int type) {
-    (void)type; // Cast to void prevents the unused parameter warning
-    return true;
-}
-
-bool SerialSimulationLink::setDataBitsType(int type) {
-    (void)type; // Cast to void prevents the unused parameter warning
-    return true;
-}
-
-bool SerialSimulationLink::setStopBitsType(int type) {
-    (void)type; // Cast to void prevents the unused parameter warning
-    return true;
-}
-
-const QString& SerialSimulationLink::getPortName() const {
-    return portName;
-}
-
-int SerialSimulationLink::getBaudRate() const {
-    return 115200;
-}
-
-int SerialSimulationLink::getBaudRateType() const {
-    return 19;
-}
-
-int SerialSimulationLink::getFlowType() const {
-    return 0;
-}
-
-int SerialSimulationLink::getParityType() const {
-    return 0;
-}
-
-int SerialSimulationLink::getDataBitsType() const {
-    return 8;
-}
-
-int SerialSimulationLink::getStopBitsType() const {
-    return 2;
-}
-
-bool SerialSimulationLink::setBaudRateType(int rateIndex) {
-    (void)rateIndex; // Cast to void prevents the unused parameter warning
-    return true;
-}

@@ -39,7 +39,7 @@ This file is part of the PIXHAWK project
 
 DebugConsole::DebugConsole(QWidget *parent) :
         QWidget(parent),
-        currLink(NULL),
+        currentLinkID(-1),
         holdOn(false),
         convertToAscii(true),
         filterMAVLINK(false),
@@ -116,35 +116,42 @@ DebugConsole::~DebugConsole()
  */
 void DebugConsole::addLink(int linkID)
 {
-    LinkInterface *link = ProtocolStack::instance().getLink(linkID);
-    if (!link) return;
+	//FIXME: this is not safe because link could be deleted every time by ProtocolStack
+	LinkInterface *link = ProtocolStack::instance().getLink(linkID);
+	if (!link) return;
     
-    // Add link to link list
-    links.insert(linkID, linkID);
+	// Add link to link list
+	linkIDs.insert(linkID, linkID);
 
-    m_ui->linkComboBox->insertItem(linkID, link->getName());
-    // Set new item as current
-    m_ui->linkComboBox->setCurrentIndex(qMax(0, links.size() - 1));
+	m_ui->linkComboBox->insertItem(linkID, link->getName());
+	// Set new item as current
+	m_ui->linkComboBox->setCurrentIndex(qMax(0, linkIDs.size() - 1));
 
-    // Register for name changes
-    connect(link, SIGNAL(nameChanged(const QString&)), this, SLOT(updateLinkName(const QString&)));
+	// Register for name changes
+	connect(link, SIGNAL(nameChanged(const QString&)),
+		this, SLOT(updateLinkName(const QString&)));
 }
 
 void DebugConsole::linkSelected(int linkId)
 {
-    // Disconnect
-    if (currLink != NULL)
-    {
-        disconnect(currLink, SIGNAL(bytesReceived(LinkInterface*,QByteArray)), this, SLOT(receiveBytes(LinkInterface*, QByteArray)));
-    }
-    // Clear data
-    m_ui->receiveText->clear();
+	//FIXME: this is not safe because link could be deleted every time by ProtocolStack
+	LinkInterface *currentLink = ProtocolStack::instance().getLink(currentLinkID);
+	// Disconnect
+	if (currentLink != NULL)
+	{
+		disconnect(currentLink, SIGNAL(dataReceived(int, const QByteArray&)),
+			this, SLOT(receiveData(int, const QByteArray&)));
+	}
+	// Clear data
+	m_ui->receiveText->clear();
 
-    // Connect new link
-    currLink = ProtocolStack::instance().getLink(linkId);
-    if (!currLink) return;
-    connect(currLink, SIGNAL(bytesReceived(LinkInterface*, const QByteArray&)),
-	    this, SLOT(receiveBytes(LinkInterface*, const QByteArray&)));
+	// Connect new link
+	currentLink = ProtocolStack::instance().getLink(linkId);
+	if (!currentLink) return;
+
+	currentLinkID = linkId;
+	connect(currentLink, SIGNAL(dataReceived(int, const QByteArray&)),
+		this, SLOT(receiveData(int, const QByteArray&)));
 }
 
 /**
@@ -232,77 +239,75 @@ void DebugConsole::paintEvent(QPaintEvent *event)
     }
 }
 
-void DebugConsole::receiveBytes(LinkInterface* link, const QByteArray bytes)
+void DebugConsole::receiveData(int linkID, const QByteArray& data)
 {
-    snapShotBytes += bytes.size();
-    // Only add date from current link
-    if (link == currLink && !holdOn)
-    {
-        // Parse all bytes
-        for (int j = 0; j < bytes.size(); j++)
-        {
-            unsigned char byte = bytes.at(j);
-            // Filter MAVLink (http://pixhawk.ethz.ch/mavlink) messages out of the stream.
-            if (filterMAVLINK && bytes.size() > 1)
-            {
-                // Filtering is done by setting an ignore counter based on the MAVLINK packet length
-                if (static_cast<unsigned char>(bytes[0]) == MAVLINK_STX) bytesToIgnore = static_cast<unsigned int>(bytes[1]) + MAVLINK_NUM_NON_PAYLOAD_BYTES; // Payload plus header
-            }
+	snapShotBytes += data.size();
+	// Only add date from current link
+	if (linkID == currentLinkID && !holdOn)
+	{
+		// Parse all bytes
+		for (int j = 0; j < data.size(); j++)
+		{
+			unsigned char byte = data.at(j);
+			// Filter MAVLink (http://pixhawk.ethz.ch/mavlink) messages out of the stream.
+			if (filterMAVLINK && data.size() > 1)
+			{
+				// Filtering is done by setting an ignore counter based on the MAVLINK packet length
+				if (static_cast<unsigned char>(data[0]) == MAVLINK_STX) bytesToIgnore = static_cast<unsigned int>(data[1]) + MAVLINK_NUM_NON_PAYLOAD_BYTES; // Payload plus header
+			}
 
-            if (bytesToIgnore <= 0)
-            {
-                QString str;
-                // Convert to ASCII for readability
-                if (convertToAscii)
-                {
-                    if ((byte < 32) || (byte > 126))
-                    {
-                        switch (byte)
-                        {
-                            // Catch line feed
-                        case (unsigned char)'\n':
-                            m_ui->receiveText->appendPlainText(str);
-                            str = "";
-                            break;
-                            // Catch carriage return
-                        case (unsigned char)'\r':
-                            // Ignore
-                            break;
-                        default:
-                            str.append(QChar(QChar::ReplacementCharacter));
-                            break;
-                        }// Append replacement character (box) if char is not ASCII
-                    }
-                    else
-                    {
-                        // Append original character
-                        str.append(byte);
-                    }
-                }
-                else
-                {
-                    QString str2;
-                    str2.sprintf("%02x ", byte);
-                    str.append(str2);
-                }
-                lineBuffer.append(str);
-            }
-            else
-            {
-                if (filterMAVLINK) bytesToIgnore--;
-                // Constrain bytes to positive range
-                bytesToIgnore = qMax(0, bytesToIgnore);
-            }
-
-        }
-        m_ui->receiveText->appendPlainText(lineBuffer);
-        lineBuffer.clear();
-
-    }
-    else if (link == currLink && holdOn)
-    {
-        holdBuffer.append(bytes);
-    }
+			if (bytesToIgnore <= 0)
+			{
+				QString str;
+				// Convert to ASCII for readability
+				if (convertToAscii)
+				{
+				if ((byte < 32) || (byte > 126))
+				{
+					switch (byte)
+					{
+					// Catch line feed
+					case (unsigned char)'\n':
+					m_ui->receiveText->appendPlainText(str);
+					str = "";
+					break;
+					// Catch carriage return
+					case (unsigned char)'\r':
+					// Ignore
+					break;
+					default:
+					str.append(QChar(QChar::ReplacementCharacter));
+					break;
+					}// Append replacement character (box) if char is not ASCII
+				}
+				else
+				{
+					// Append original character
+					str.append(byte);
+				}
+				}
+				else
+				{
+				QString str2;
+				str2.sprintf("%02x ", byte);
+				str.append(str2);
+				}
+				lineBuffer.append(str);
+			}
+			else
+			{
+				if (filterMAVLINK) bytesToIgnore--;
+				// Constrain bytes to positive range
+				bytesToIgnore = qMax(0, bytesToIgnore);
+			}
+		}
+		m_ui->receiveText->appendPlainText(lineBuffer);
+		lineBuffer.clear();
+	}
+	else if (linkID == currentLinkID && holdOn)
+	{
+		holdBuffer.append(data);
+	}
 }
 
 void DebugConsole::sendBytes()
@@ -360,8 +365,13 @@ void DebugConsole::sendBytes()
     if (ok && m_ui->sendText->text().toLatin1().size() > 0)
     {
         // Transmit only if conversion succeeded
-        currLink->write(transmit, transmit.size());
-        m_ui->sentText->setText(tr("Sent: ") + feedback);
+	//FIXME
+	LinkInterface *currentLink = ProtocolStack::instance().getLink(currentLinkID);
+	if (currentLink)
+	{
+		currentLink->write(transmit, transmit.size());
+		m_ui->sentText->setText(tr("Sent: ") + feedback);
+	}
     }
     else if (m_ui->sendText->text().toLatin1().size() > 0)
     {

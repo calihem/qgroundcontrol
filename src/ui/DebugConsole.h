@@ -57,7 +57,7 @@ public slots:
     /** @brief Select a link for the active view */
     void linkSelected(int linkId);
     /** @brief Receive bytes from link */
-    void receiveBytes(LinkInterface* link, const QByteArray bytes);
+    void receiveData(int linkID, const QByteArray& data);
     /** @brief Send lineedit content over link */
     void sendBytes();
     /** @brief Enable HEX display mode */
@@ -80,8 +80,8 @@ public slots:
 protected:
     void changeEvent(QEvent *e);
 
-    QList<int> links;
-    LinkInterface* currLink;
+    QList<int> linkIDs;
+    int currentLinkID;
 
     bool holdOn;              ///< Hold current view, ignore new data
     bool convertToAscii;      ///< Convert data to ASCII

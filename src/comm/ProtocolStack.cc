@@ -259,8 +259,8 @@ int ProtocolStack::registerProtocol(int linkID, ProtocolType protocolType)
 
 	linkProtocolMap.insert(link, protocol);
 
-	connect( link, SIGNAL(bytesReady(LinkInterface*)),
-		protocol, SLOT(receiveBytes(LinkInterface*)) );
+	connect( link, SIGNAL(dataReceived(int, const QByteArray&)),
+		 protocol, SLOT(handleLinkInput(int, const QByteArray&)) );
 		
 	return 0;
 }

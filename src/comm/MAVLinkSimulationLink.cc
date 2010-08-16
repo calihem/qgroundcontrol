@@ -143,7 +143,8 @@ void MAVLinkSimulationLink::run()
 
 
 
-                emit bytesReady(this);
+//                 emit bytesReady(this);
+		emit readyRead(id);
             }
             last = MG::TIME::getGroundTimeNow();
         }
@@ -757,7 +758,8 @@ qint64 MAVLinkSimulationLink::read(char* const data, qint64 maxLength) {
     }
 
     QByteArray b(data, len);
-    emit bytesReceived(this, b);
+//     emit bytesReceived(this, b);
+	emit dataReceived(id, b);
 
     readyBufferMutex.unlock();
 

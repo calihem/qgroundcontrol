@@ -48,20 +48,22 @@ This file is part of the PIXHAWK project
 class ProtocolInterface : public QThread
 {
 	Q_OBJECT
-public:
-	virtual ~ProtocolInterface() {};
-	/** @brief Get the human-friendly name of this protocol */
-	virtual const QString& getName() const;
+	public:
+		virtual ~ProtocolInterface() {};
+		/** @brief Get the human-friendly name of this protocol */
+		virtual const QString& getName() const;
 
-public slots:
-	virtual void receiveBytes(LinkInterface* link) = 0;
+	public slots:
+// 		virtual void receiveBytes(LinkInterface* link) = 0;
+// 		virtual void readFromLink(int linkID) = 0;
+		virtual void handleLinkInput(int linkID, const QByteArray& data) = 0;
 
-signals:
-	/** @brief Update the packet loss from one system */
-	void receiveLossChanged(int uasId, float loss);
+	signals:
+		/** @brief Update the packet loss from one system */
+		void receiveLossChanged(int uasId, float loss);
 
-protected:
-	QString name;
+	protected:
+		QString name;
 };
 
 // ----------------------------------------------------------------------------

@@ -129,8 +129,8 @@ qint64 UDPLink::read(char* data, qint64 maxLength)
 
     // FIXME TODO Check if this method is better than retrieving the data by individual processes
     QByteArray b(data, receivedBytes);
-    emit bytesReceived(this, b);
-
+//     emit bytesReceived(this, b);
+	emit dataReceived(id, b);
 //    // Echo data for debugging purposes
 //    std::cerr << __FILE__ << __LINE__ << "Received datagram:" << std::endl;
 //    int i;
@@ -173,7 +173,8 @@ qint64 UDPLink::bytesAvailable() const {
  **/
 void UDPLink::emitBytesReady()
 {
-    emit bytesReady(this);
+//     emit bytesReady(this);
+	emit readyRead(id);
 }
 
 /**

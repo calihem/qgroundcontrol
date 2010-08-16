@@ -99,187 +99,194 @@ QString MAVLinkProtocol::getLogfileName()
     return QCoreApplication::applicationDirPath()+"/mavlink.log";
 }
 
-void MAVLinkProtocol::receiveBytes(LinkInterface* link)
+void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 {
-    // Prepare buffer
-    static const int maxlen = 4096 * 100;
-    static char buffer[maxlen];
+	if (linkID < 0)
+	{
+		qDebug() << "Link ID not set properly";
+		return;
+	}
+	mavlink_message_t message;
+	mavlink_status_t status;
 
-    receiveMutex.lock();
+	receiveMutex.lock();
 
-    // Get all data at once, let link read the bytes in the buffer array
-    qint64 bytesReaded = link->read(buffer, maxlen);
- 
-    mavlink_message_t message;
-    mavlink_status_t status;
-    for (int position = 0; position < bytesReaded; position++)
-    {
-        unsigned int decodeState = mavlink_parse_char(link->getID(), (uint8_t)*(buffer + position), &message, &status);
+	for (int position = 0; position < data.size(); position++)
+	{
+		unsigned int decodeState = mavlink_parse_char(linkID, (uint8_t)data.at(position), &message, &status);
 
-        if (decodeState == 1)
-        {
-            // Log data
-            if (m_loggingEnabled)
-            {
-                uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-                quint64 time = MG::TIME::getGroundTimeNowUsecs();
-                memcpy(buf, (void*)&time, sizeof(quint64));
-                mavlink_msg_to_send_buffer(buf+sizeof(quint64), &message);
-                m_logfile->write((const char*) buf);
-                qDebug() << "WROTE LOGFILE";
-            }
+		if (decodeState == 1)
+		{
+			// Log data
+			if (m_loggingEnabled)
+			{
+				uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+				quint64 time = MG::TIME::getGroundTimeNowUsecs();
+				memcpy(buf, (void*)&time, sizeof(quint64));
+				mavlink_msg_to_send_buffer(buf+sizeof(quint64), &message);
+				m_logfile->write((const char*) buf);
+				qDebug() << "WROTE LOGFILE";
+			}
 
-            // ORDER MATTERS HERE!
-            // If the matching UAS object does not yet exist, it has to be created
-            // before emitting the packetReceived signal
-            UASInterface* uas = UASManager::instance()->getUASForId(message.sysid);
+			// ORDER MATTERS HERE!
+			// If the matching UAS object does not yet exist, it has to be created
+			// before emitting the packetReceived signal
+			UASInterface* uas = UASManager::instance()->getUASForId(message.sysid);
 
-            // Check and (if necessary) create UAS object
-            if (uas == NULL && message.msgid == MAVLINK_MSG_ID_HEARTBEAT)
-            {
-                // ORDER MATTERS HERE!
-                // The UAS object has first to be created and connected,
-                // only then the rest of the application can be made aware
-                // of its existence, as it only then can send and receive
-                // it's first messages.
+			// Check and (if necessary) create UAS object
+			if (uas == NULL && message.msgid == MAVLINK_MSG_ID_HEARTBEAT)
+			{
+				// ORDER MATTERS HERE!
+				// The UAS object has first to be created and connected,
+				// only then the rest of the application can be made aware
+				// of its existence, as it only then can send and receive
+				// it's first messages.
 
-                // FIXME Current debugging
-                // check if the UAS has the same id like this system
-                if (message.sysid == getSystemId())
-                {
-                    qDebug() << "WARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\n\n RECEIVED MESSAGE FROM THIS SYSTEM WITH ID" << message.msgid << "FROM COMPONENT" << message.compid;
-                }
+				// FIXME Current debugging
+				// check if the UAS has the same id like this system
+				if (message.sysid == getSystemId())
+				{
+				qDebug() << "WARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\n\n RECEIVED MESSAGE FROM THIS SYSTEM WITH ID" << message.msgid << "FROM COMPONENT" << message.compid;
+				}
 
-                // Create a new UAS based on the heartbeat received
-                // Todo dynamically load plugin at run-time for MAV
-                // WIKISEARCH:AUTOPILOT_TYPE_INSTANTIATION
+				// Create a new UAS based on the heartbeat received
+				// Todo dynamically load plugin at run-time for MAV
+				// WIKISEARCH:AUTOPILOT_TYPE_INSTANTIATION
 
-                // First create new UAS object
-                // Decode heartbeat message
-                mavlink_heartbeat_t heartbeat;
-                mavlink_msg_heartbeat_decode(&message, &heartbeat);
-                switch (heartbeat.autopilot)
-                {
-                case MAV_AUTOPILOT_GENERIC:
-                    uas = new UAS(this, message.sysid);
-                    // Connect this robot to the UAS object
-                    connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), uas, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-                    break;
-                case MAV_AUTOPILOT_PIXHAWK:
-                    {
-                    // Fixme differentiate between quadrotor and coaxial here
-                    PxQuadMAV* mav = new PxQuadMAV(this, message.sysid);
-                    // Connect this robot to the UAS object
-                    // it is IMPORTANT here to use the right object type,
-                    // else the slot of the parent object is called (and thus the special
-                    // packets never reach their goal)
-                    connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-                    uas = mav;
-                }
-                    break;
-                case MAV_AUTOPILOT_SLUGS:
-                    {
-                    SlugsMAV* mav = new SlugsMAV(this, message.sysid);
-                    // Connect this robot to the UAS object
-                    // it is IMPORTANT here to use the right object type,
-                    // else the slot of the parent object is called (and thus the special
-                    // packets never reach their goal)
-                    connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-                    uas = mav;
-                }
-                    break;
-                case MAV_AUTOPILOT_ARDUPILOT:
-                    {
-                    ArduPilotMAV* mav = new ArduPilotMAV(this, message.sysid);
-                    // Connect this robot to the UAS object
-                    // it is IMPORTANT here to use the right object type,
-                    // else the slot of the parent object is called (and thus the special
-                    // packets never reach their goal)
-                    connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-                    uas = mav;
-                }
-                    break;
-                default:
-                    uas = new UAS(this, message.sysid);
-                    break;
-                }
+				// First create new UAS object
+				// Decode heartbeat message
+				mavlink_heartbeat_t heartbeat;
+				mavlink_msg_heartbeat_decode(&message, &heartbeat);
+				switch (heartbeat.autopilot)
+				{
+				case MAV_AUTOPILOT_GENERIC:
+				uas = new UAS(this, message.sysid);
+				// Connect this robot to the UAS object
+				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), uas, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
+				break;
+				case MAV_AUTOPILOT_PIXHAWK:
+				{
+				// Fixme differentiate between quadrotor and coaxial here
+				PxQuadMAV* mav = new PxQuadMAV(this, message.sysid);
+				// Connect this robot to the UAS object
+				// it is IMPORTANT here to use the right object type,
+				// else the slot of the parent object is called (and thus the special
+				// packets never reach their goal)
+				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
+				uas = mav;
+				}
+				break;
+				case MAV_AUTOPILOT_SLUGS:
+				{
+				SlugsMAV* mav = new SlugsMAV(this, message.sysid);
+				// Connect this robot to the UAS object
+				// it is IMPORTANT here to use the right object type,
+				// else the slot of the parent object is called (and thus the special
+				// packets never reach their goal)
+				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
+				uas = mav;
+				}
+				break;
+				case MAV_AUTOPILOT_ARDUPILOT:
+				{
+				ArduPilotMAV* mav = new ArduPilotMAV(this, message.sysid);
+				// Connect this robot to the UAS object
+				// it is IMPORTANT here to use the right object type,
+				// else the slot of the parent object is called (and thus the special
+				// packets never reach their goal)
+				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
+				uas = mav;
+				}
+				break;
+				default:
+				uas = new UAS(this, message.sysid);
+				break;
+				}
+				
+				//FIXME: use linkID instead of pointer for addLink
+				LinkInterface *link = ProtocolStack::instance().getLink(linkID);
+				if (link)
+				{
+					// Make UAS aware that this link can be used to communicate with the actual robot
+					uas->addLink(link);
+				}
+				// Now add UAS to "official" list, which makes the whole application aware of it
+				UASManager::instance()->addUAS(uas);
+			}
 
+			// Only count message if UAS exists for this message
+			if (uas != NULL)
+			{
+				// Increase receive counter
+				totalReceiveCounter++;
+				currReceiveCounter++;
+				qint64 lastLoss = totalLossCounter;
+				// Update last packet index
+				if (lastIndex[message.sysid][message.compid] == -1)
+				{
+				lastIndex[message.sysid][message.compid] = message.seq;
+				}
+				else
+				{
+				if (lastIndex[message.sysid][message.compid] == 255)
+				{
+					lastIndex[message.sysid][message.compid] = 0;
+				}
+				else
+				{
+					lastIndex[message.sysid][message.compid]++;
+				}
 
-                // Make UAS aware that this link can be used to communicate with the actual robot
-                uas->addLink(link);
-                // Now add UAS to "official" list, which makes the whole application aware of it
-                UASManager::instance()->addUAS(uas);
-            }
+				int safeguard = 0;
+				//qDebug() << "SYSID" << message.sysid << "COMPID" << message.compid << "MSGID" << message.msgid << "LASTINDEX" << lastIndex[message.sysid][message.compid] << "SEQ" << message.seq;
+				while(lastIndex[message.sysid][message.compid] != message.seq && safeguard < 255)
+				{
+					if (lastIndex[message.sysid][message.compid] == 255)
+					{
+					lastIndex[message.sysid][message.compid] = 0;
+					}
+					else
+					{
+					lastIndex[message.sysid][message.compid]++;
+					}
+					totalLossCounter++;
+					currLossCounter++;
+					safeguard++;
+				}
+				}
+				//            if (lastIndex.contains(message.sysid))
+				//            {
+				//                QMap<int, int>* lastCompIndex = lastIndex.value(message.sysid);
+				//                if (lastCompIndex->contains(message.compid))
+				//                while (lastCompIndex->value(message.compid, 0)+1 )
+				//            }
+				//if ()
 
-            // Only count message if UAS exists for this message
-            if (uas != NULL)
-            {
-                // Increase receive counter
-                totalReceiveCounter++;
-                currReceiveCounter++;
-                qint64 lastLoss = totalLossCounter;
-                // Update last packet index
-                if (lastIndex[message.sysid][message.compid] == -1)
-                {
-                    lastIndex[message.sysid][message.compid] = message.seq;
-                }
-                else
-                {
-                    if (lastIndex[message.sysid][message.compid] == 255)
-                    {
-                        lastIndex[message.sysid][message.compid] = 0;
-                    }
-                    else
-                    {
-                        lastIndex[message.sysid][message.compid]++;
-                    }
+				// If a new loss was detected or we just hit one 128th packet step
+				if (lastLoss != totalLossCounter || (totalReceiveCounter & 0x7F) == 0)
+				{
+				// Calculate new loss ratio
+				// Receive loss
+				float receiveLoss = (double)currLossCounter/(double)(currReceiveCounter+currLossCounter);
+				receiveLoss *= 100.0f;
+				// qDebug() << "LOSSCHANGED" << receiveLoss;
+				currLossCounter = 0;
+				currReceiveCounter = 0;
+				emit receiveLossChanged(message.sysid, receiveLoss);
+				}
 
-                    int safeguard = 0;
-                    //qDebug() << "SYSID" << message.sysid << "COMPID" << message.compid << "MSGID" << message.msgid << "LASTINDEX" << lastIndex[message.sysid][message.compid] << "SEQ" << message.seq;
-                    while(lastIndex[message.sysid][message.compid] != message.seq && safeguard < 255)
-                    {
-                        if (lastIndex[message.sysid][message.compid] == 255)
-                        {
-                            lastIndex[message.sysid][message.compid] = 0;
-                        }
-                        else
-                        {
-                            lastIndex[message.sysid][message.compid]++;
-                        }
-                        totalLossCounter++;
-                        currLossCounter++;
-                        safeguard++;
-                    }
-                }
-                //            if (lastIndex.contains(message.sysid))
-                //            {
-                //                QMap<int, int>* lastCompIndex = lastIndex.value(message.sysid);
-                //                if (lastCompIndex->contains(message.compid))
-                //                while (lastCompIndex->value(message.compid, 0)+1 )
-                //            }
-                //if ()
+				//FIXME: use linkID instead of pointer for addLink
+				LinkInterface *link = ProtocolStack::instance().getLink(linkID);
 
-                // If a new loss was detected or we just hit one 128th packet step
-                if (lastLoss != totalLossCounter || (totalReceiveCounter & 0x7F) == 0)
-                {
-                    // Calculate new loss ratio
-                    // Receive loss
-                    float receiveLoss = (double)currLossCounter/(double)(currReceiveCounter+currLossCounter);
-                    receiveLoss *= 100.0f;
-                    // qDebug() << "LOSSCHANGED" << receiveLoss;
-                    currLossCounter = 0;
-                    currReceiveCounter = 0;
-                    emit receiveLossChanged(message.sysid, receiveLoss);
-                }
-
-                // The packet is emitted as a whole, as it is only 255 - 261 bytes short
-                // kind of inefficient, but no issue for a groundstation pc.
-                // It buys as reentrancy for the whole code over all threads
-                emit messageReceived(link, message);
-            }
-        }
-    }
-    receiveMutex.unlock();
+				// The packet is emitted as a whole, as it is only 255 - 261 bytes short
+				// kind of inefficient, but no issue for a groundstation pc.
+				// It buys as reentrancy for the whole code over all threads
+				if (link)
+					emit messageReceived(link, message);
+			}
+		}
+	}
+	receiveMutex.unlock();
 }
 
 /** @return System id of this application */
