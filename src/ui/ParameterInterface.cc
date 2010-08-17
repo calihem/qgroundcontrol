@@ -45,10 +45,10 @@ void ParameterInterface::selectUAS(int index)
  */
 void ParameterInterface::addUAS(UASInterface* uas)
 {
-    m_ui->vehicleComboBox->addItem(uas->getUASName());
+    m_ui->vehicleComboBox->addItem(uas->getName());
 
     QGCParamWidget* param = new QGCParamWidget(uas, this);
-    paramWidgets->insert(uas->getUASID(), param);
+    paramWidgets->insert(uas->getID(), param);
     m_ui->stackedWidget->addWidget(param);
 
 

@@ -49,18 +49,18 @@ void Linecharts::selectSystem(int systemid)
 
 void Linecharts::addSystem(UASInterface* uas)
 {
-    if (!plots.contains(uas->getUASID()))
+    if (!plots.contains(uas->getID()))
     {
-        LinechartWidget* widget = new LinechartWidget(uas->getUASID(), this);
+        LinechartWidget* widget = new LinechartWidget(uas->getID(), this);
         addWidget(widget);
-        plots.insert(uas->getUASID(), widget);
+        plots.insert(uas->getID(), widget);
         connect(uas, SIGNAL(valueChanged(int,QString,double,quint64)), widget, SLOT(appendData(int,QString,double,quint64)));
         // Set system active if this is the only system
         if (active)
         {
             if (plots.size() == 1)
             {
-                selectSystem(uas->getUASID());
+                selectSystem(uas->getID());
             }
         }
     }

@@ -229,7 +229,7 @@ void HUD::setActiveUAS(UASInterface* uas)
 
     //if (this->uas != uas)
     // {
-    qDebug() << "UAS SET!" << "ID:" << uas->getUASID();
+    qDebug() << "UAS SET!" << "ID:" << uas->getID();
     // Setup communication
     connect(uas, SIGNAL(attitudeChanged(UASInterface*,double,double,double,quint64)), this, SLOT(updateAttitude(UASInterface*, double, double, double, quint64)));
     connect(uas, SIGNAL(batteryChanged(UASInterface*, double, double, int)), this, SLOT(updateBattery(UASInterface*, double, double, int)));

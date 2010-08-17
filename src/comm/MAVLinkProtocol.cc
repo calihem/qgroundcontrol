@@ -37,15 +37,11 @@ This file is part of the PIXHAWK project
 #include <QTime>
 #include <QApplication>
 
-#include "MG.h"
 #include "MAVLinkProtocol.h"
-#include "UASInterface.h"
+#include "UASFactory.h"
+// #include "UASInterface.h"
 #include "UASManager.h"
-#include "UASInterface.h"
-#include "UAS.h"
-#include "SlugsMAV.h"
-#include "PxQuadMAV.h"
-#include "ArduPilotMAV.h"
+// #include "UASInterface.h"
 #include "configuration.h"
 #include "ProtocolStack.h"
 #include <mavlink.h>
@@ -59,8 +55,6 @@ MAVLinkProtocol::MAVLinkProtocol() :
 	heartbeatTimer(this),
 	heartbeatRate(MAVLINK_HEARTBEAT_DEFAULT_RATE),
 	m_heartbeatsEnabled(false),
-	m_loggingEnabled(false),
-	m_logfile(NULL),
 	totalReceiveCounter(0),
 	totalLossCounter(0),
 	currReceiveCounter(0),
@@ -80,36 +74,62 @@ MAVLinkProtocol::MAVLinkProtocol() :
 
 MAVLinkProtocol::~MAVLinkProtocol()
 {
-    if (m_logfile)
-    {
-        m_logfile->close();
-        delete m_logfile;
-    }
+	if (logFile)
+	{
+		logFile->close();
+		delete logFile;
+	}
 }
 
 
 
 void MAVLinkProtocol::run()
 {
-
+	//TODO: put parsing of bytestream and forwarding to UAS in thread mainloop
 }
 
-QString MAVLinkProtocol::getLogfileName()
+const QString& MAVLinkProtocol::getLogfileName()
 {
-    return QCoreApplication::applicationDirPath()+"/mavlink.log";
+	static QString logfilename = QCoreApplication::applicationDirPath()+"/mavlink.log";
+	return logfilename;
+}
+
+void MAVLinkProtocol::readFromLink(int linkID)
+{
+	receiveMutex.lock();
+
+	LinkInterface *link = ProtocolStack::instance().getLink(linkID);
+	if (!link) return;
+	
+	// Prepare buffer
+	static const int maxlen = 4096 * 100;
+	static char buffer[maxlen];
+	qint64 bytesToRead = link->bytesAvailable();
+
+	if (bytesToRead > maxlen) bytesToRead = maxlen;
+	// Get all data at once, let link read the bytes in the buffer array
+	qint64 bytesRead = link->read(buffer, bytesToRead);
+
+	// Construct new QByteArray of size bytesRead without copying buffer
+	QByteArray data = QByteArray::fromRawData(buffer, bytesRead);
+	
+	handleLinkInput(linkID, data);
+
+	receiveMutex.unlock();
 }
 
 void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 {
-	if (linkID < 0)
+	if (linkID < 0 || linkID >= MAVLINK_COMM_NB_HIGH)
 	{
-		qDebug() << "Link ID not set properly";
+		qDebug() << "Link ID out of range";
 		return;
 	}
+
+	parsingMutex.lock();
+
 	mavlink_message_t message;
 	mavlink_status_t status;
-
-	receiveMutex.lock();
 
 	for (int position = 0; position < data.size(); position++)
 	{
@@ -118,13 +138,13 @@ void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 		if (decodeState == 1)
 		{
 			// Log data
-			if (m_loggingEnabled)
+			if (logFile)
 			{
 				uint8_t buf[MAVLINK_MAX_PACKET_LEN];
 				quint64 time = MG::TIME::getGroundTimeNowUsecs();
 				memcpy(buf, (void*)&time, sizeof(quint64));
 				mavlink_msg_to_send_buffer(buf+sizeof(quint64), &message);
-				m_logfile->write((const char*) buf);
+				logFile->write((const char*) buf);
 				qDebug() << "WROTE LOGFILE";
 			}
 
@@ -144,9 +164,9 @@ void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 
 				// FIXME Current debugging
 				// check if the UAS has the same id like this system
-				if (message.sysid == getSystemId())
+				if (message.sysid == MG::SYSTEM::ID)
 				{
-				qDebug() << "WARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\n\n RECEIVED MESSAGE FROM THIS SYSTEM WITH ID" << message.msgid << "FROM COMPONENT" << message.compid;
+					qDebug() << "WARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\nWARNING\n\n RECEIVED MESSAGE FROM THIS SYSTEM WITH ID" << message.msgid << "FROM COMPONENT" << message.compid;
 				}
 
 				// Create a new UAS based on the heartbeat received
@@ -157,61 +177,22 @@ void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 				// Decode heartbeat message
 				mavlink_heartbeat_t heartbeat;
 				mavlink_msg_heartbeat_decode(&message, &heartbeat);
-				switch (heartbeat.autopilot)
+				uas = UASFactory::buildUAV( (MAV_AUTOPILOT_TYPE)heartbeat.autopilot, message.sysid);
+				if (!uas)
 				{
-				case MAV_AUTOPILOT_GENERIC:
-				uas = new UAS(this, message.sysid);
-				// Connect this robot to the UAS object
-				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), uas, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-				break;
-				case MAV_AUTOPILOT_PIXHAWK:
-				{
-				// Fixme differentiate between quadrotor and coaxial here
-				PxQuadMAV* mav = new PxQuadMAV(this, message.sysid);
-				// Connect this robot to the UAS object
-				// it is IMPORTANT here to use the right object type,
-				// else the slot of the parent object is called (and thus the special
-				// packets never reach their goal)
-				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-				uas = mav;
+					qDebug() << "Builing of UAS failed";
 				}
-				break;
-				case MAV_AUTOPILOT_SLUGS:
-				{
-				SlugsMAV* mav = new SlugsMAV(this, message.sysid);
-				// Connect this robot to the UAS object
-				// it is IMPORTANT here to use the right object type,
-				// else the slot of the parent object is called (and thus the special
-				// packets never reach their goal)
-				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-				uas = mav;
+				else
+				{ // builing of uas succesufull
+					//FIXME: connection should be the task of UASManager/ ProtocolStackis
+					connect(this, SIGNAL(messageReceived(const mavlink_message_t&)),
+							uas, SLOT(handleMessage(const mavlink_message_t&)));
+					connect(uas, SIGNAL(messageToSend(const mavlink_message_t&)),
+						this, SLOT(sendMessage(const mavlink_message_t)) );
+
+					// Now add UAS to "official" list, which makes the whole application aware of it
+					UASManager::instance()->addUAS(uas);
 				}
-				break;
-				case MAV_AUTOPILOT_ARDUPILOT:
-				{
-				ArduPilotMAV* mav = new ArduPilotMAV(this, message.sysid);
-				// Connect this robot to the UAS object
-				// it is IMPORTANT here to use the right object type,
-				// else the slot of the parent object is called (and thus the special
-				// packets never reach their goal)
-				connect(this, SIGNAL(messageReceived(LinkInterface*, mavlink_message_t)), mav, SLOT(receiveMessage(LinkInterface*, mavlink_message_t)));
-				uas = mav;
-				}
-				break;
-				default:
-				uas = new UAS(this, message.sysid);
-				break;
-				}
-				
-				//FIXME: use linkID instead of pointer for addLink
-				LinkInterface *link = ProtocolStack::instance().getLink(linkID);
-				if (link)
-				{
-					// Make UAS aware that this link can be used to communicate with the actual robot
-					uas->addLink(link);
-				}
-				// Now add UAS to "official" list, which makes the whole application aware of it
-				UASManager::instance()->addUAS(uas);
 			}
 
 			// Only count message if UAS exists for this message
@@ -224,35 +205,35 @@ void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 				// Update last packet index
 				if (lastIndex[message.sysid][message.compid] == -1)
 				{
-				lastIndex[message.sysid][message.compid] = message.seq;
+					lastIndex[message.sysid][message.compid] = message.seq;
 				}
 				else
-				{
-				if (lastIndex[message.sysid][message.compid] == 255)
-				{
-					lastIndex[message.sysid][message.compid] = 0;
-				}
-				else
-				{
-					lastIndex[message.sysid][message.compid]++;
-				}
-
-				int safeguard = 0;
-				//qDebug() << "SYSID" << message.sysid << "COMPID" << message.compid << "MSGID" << message.msgid << "LASTINDEX" << lastIndex[message.sysid][message.compid] << "SEQ" << message.seq;
-				while(lastIndex[message.sysid][message.compid] != message.seq && safeguard < 255)
 				{
 					if (lastIndex[message.sysid][message.compid] == 255)
 					{
-					lastIndex[message.sysid][message.compid] = 0;
+						lastIndex[message.sysid][message.compid] = 0;
 					}
 					else
 					{
-					lastIndex[message.sysid][message.compid]++;
+						lastIndex[message.sysid][message.compid]++;
 					}
-					totalLossCounter++;
-					currLossCounter++;
-					safeguard++;
-				}
+
+					int safeguard = 0;
+					//qDebug() << "SYSID" << message.sysid << "COMPID" << message.compid << "MSGID" << message.msgid << "LASTINDEX" << lastIndex[message.sysid][message.compid] << "SEQ" << message.seq;
+					while(lastIndex[message.sysid][message.compid] != message.seq && safeguard < 255)
+					{
+						if (lastIndex[message.sysid][message.compid] == 255)
+						{
+							lastIndex[message.sysid][message.compid] = 0;
+						}
+						else
+						{
+							lastIndex[message.sysid][message.compid]++;
+						}
+						totalLossCounter++;
+						currLossCounter++;
+						safeguard++;
+					}
 				}
 				//            if (lastIndex.contains(message.sysid))
 				//            {
@@ -265,84 +246,40 @@ void MAVLinkProtocol::handleLinkInput(int linkID, const QByteArray& data)
 				// If a new loss was detected or we just hit one 128th packet step
 				if (lastLoss != totalLossCounter || (totalReceiveCounter & 0x7F) == 0)
 				{
-				// Calculate new loss ratio
-				// Receive loss
-				float receiveLoss = (double)currLossCounter/(double)(currReceiveCounter+currLossCounter);
-				receiveLoss *= 100.0f;
-				// qDebug() << "LOSSCHANGED" << receiveLoss;
-				currLossCounter = 0;
-				currReceiveCounter = 0;
-				emit receiveLossChanged(message.sysid, receiveLoss);
+					// Calculate new loss ratio
+					// Receive loss
+					float receiveLoss = (double)currLossCounter/(double)(currReceiveCounter+currLossCounter);
+					receiveLoss *= 100.0f;
+					// qDebug() << "LOSSCHANGED" << receiveLoss;
+					currLossCounter = 0;
+					currReceiveCounter = 0;
+					emit receiveLossChanged(message.sysid, receiveLoss);
 				}
-
-				//FIXME: use linkID instead of pointer for addLink
-				LinkInterface *link = ProtocolStack::instance().getLink(linkID);
 
 				// The packet is emitted as a whole, as it is only 255 - 261 bytes short
 				// kind of inefficient, but no issue for a groundstation pc.
 				// It buys as reentrancy for the whole code over all threads
-				if (link)
-					emit messageReceived(link, message);
+				emit messageReceived(message);
 			}
 		}
 	}
-	receiveMutex.unlock();
+	parsingMutex.unlock();
 }
 
-/** @return System id of this application */
-int MAVLinkProtocol::getSystemId()
+
+void MAVLinkProtocol::sendMessage(const mavlink_message_t& message)
 {
-    return MG::SYSTEM::ID;
+	sendMutex.lock();
+
+	// Write message into buffer, prepending start sign
+	int bufferLen = mavlink_msg_to_send_buffer(sendBuffer, &message);
+	// Construct new QByteArray of size dataRead without copying buffer
+	QByteArray data = QByteArray::fromRawData((char*)sendBuffer, bufferLen);
+	emit dataToSend(data);
+	
+	sendMutex.unlock();
 }
 
-/** @return Component id of this application */
-int MAVLinkProtocol::getComponentId()
-{
-    return MG::SYSTEM::COMPID;
-}
-
-/**
- * @param message message to send
- */
-void MAVLinkProtocol::sendMessage(mavlink_message_t message)
-{
-    // Get all links connected to this unit
-    QList<int> linkIDs = ProtocolStack::instance().getLinkIDs(ProtocolStack::MAVLinkProtocol);
-
-    // Emit message on all links that are currently connected
-    QList<int>::iterator i;
-    for (i = linkIDs.begin(); i != linkIDs.end(); ++i)
-    {
-        sendMessage(*i, message);
-    }
-}
-
-/**
- * @param link the link to send the message over
- * @param message message to send
- */
-void MAVLinkProtocol::sendMessage(int linkID, mavlink_message_t message)
-{
-    LinkInterface *link = ProtocolStack::instance().getLink(linkID);
-    if (!link) return;
-
-    // Create buffer
-    uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
-    // Write message into buffer, prepending start sign
-    int len = mavlink_msg_to_send_buffer(buffer, &message);
-    // If link is connected
-    if (link->isConnected())
-    {
-        // Send the portion of the buffer now occupied by the message
-        link->write((const char*)buffer, len);
-    }
-}
-
-/**
- * The heartbeat is sent out of order and does not reset the
- * periodic heartbeat emission. It will be just sent in addition.
- * @return mavlink_message_t heartbeat message sent on serial link
- */
 void MAVLinkProtocol::sendHeartbeat()
 {
     if (m_heartbeatsEnabled)
@@ -353,7 +290,6 @@ void MAVLinkProtocol::sendHeartbeat()
     }
 }
 
-/** @param enabled true to enable heartbeats emission at heartbeatRate, false to disable */
 void MAVLinkProtocol::enableHeartbeats(bool enabled)
 {
     m_heartbeatsEnabled = enabled;
@@ -362,43 +298,22 @@ void MAVLinkProtocol::enableHeartbeats(bool enabled)
 
 void MAVLinkProtocol::enableLogging(bool enabled)
 {
-    if (enabled && !m_loggingEnabled)
-    {
-       m_logfile = new QFile(getLogfileName());
-       m_logfile->open(QIODevice::WriteOnly | QIODevice::Append);
-    }
-    else
-    {
-       m_logfile->close();
-       delete m_logfile;
-       m_logfile = NULL;
-    }
-    m_loggingEnabled = enabled;
+	if (enabled && !logFile)
+	{
+		logFile = new QFile( getLogfileName() );
+		logFile->open(QIODevice::WriteOnly | QIODevice::Append);
+	}
+	else
+	{
+		logFile->close();
+		delete logFile;
+	}
 }
 
-bool MAVLinkProtocol::heartbeatsEnabled(void)
-{
-    return m_heartbeatsEnabled;
-}
 
-bool MAVLinkProtocol::loggingEnabled(void)
-{
-    return m_loggingEnabled;
-}
-
-/**
- * The default rate is 1 Hertz.
- *
- * @param rate heartbeat rate in hertz (times per second)
- */
 void MAVLinkProtocol::setHeartbeatRate(int rate)
 {
     heartbeatRate = rate;
     heartbeatTimer.setInterval(1000/heartbeatRate);
 }
 
-/** @return heartbeat rate in Hertz */
-int MAVLinkProtocol::getHeartbeatRate()
-{
-    return heartbeatRate;
-}

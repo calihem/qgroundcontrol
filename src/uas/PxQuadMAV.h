@@ -8,10 +8,10 @@ class PxQuadMAV : public UAS
     Q_OBJECT
     Q_INTERFACES(UASInterface)
 public:
-    PxQuadMAV(MAVLinkProtocol* mavlink, int id);
+    PxQuadMAV(int id);
 public slots:
     /** @brief Receive a MAVLink message from this MAV */
-    void receiveMessage(LinkInterface* link, mavlink_message_t message);
+    virtual void handleMessage(const mavlink_message_t& message);
     /** @brief Send a command to an onboard process */
     void sendProcessCommand(int watchdogId, int processId, unsigned int command);
 signals:

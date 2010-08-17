@@ -31,7 +31,7 @@ This file is part of the PIXHAWK project
 #ifndef _UASMANAGER_H_
 #define _UASMANAGER_H_
 
-#include <QThread>
+#include <QObject>
 #include <QList>
 #include <QMutex>
 #include <UASInterface.h>
@@ -42,7 +42,7 @@ This file is part of the PIXHAWK project
  * This class keeps a list of all connected / configured UASs. It also stores which
  * UAS is currently select with respect to user input or manual controls.
  **/
-class UASManager : public QThread
+class UASManager : public QObject
 {
     Q_OBJECT
 
@@ -50,7 +50,6 @@ public:
     static UASManager* instance();
     ~UASManager();
 
-    void run();
     /**
      * @brief Get the currently selected UAS
      *

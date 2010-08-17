@@ -114,6 +114,7 @@ HEADERS += src/MG.h \
     src/uas/UASInterface.h \
     src/uas/UAS.h \
     src/uas/UASManager.h \
+    src/uas/UASFactory.h \
     src/comm/ProtocolStack.h \
     src/comm/LinkInterface.h \
     src/comm/SerialLinkInterface.h \

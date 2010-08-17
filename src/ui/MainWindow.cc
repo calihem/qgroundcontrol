@@ -364,11 +364,13 @@ void MainWindow::addLinkAction(int linkID)
 
 void MainWindow::UASCreated(UASInterface* uas)
 {
-    // Connect the UAS to the full user interface
-    //ui.menuConnected_Systems->addAction(QIcon(":/images/mavs/generic.svg"), tr("View ") + uas->getUASName(), uas, SLOT(setSelected()));
+	if (!uas) return;
 
-    // FIXME Should be not inside the mainwindow
-    connect(uas, SIGNAL(textMessageReceived(int,int,QString)), debugConsoleWidget, SLOT(receiveTextMessage(int,int,QString)));
+	// Connect the UAS to the full user interface
+	//ui.menuConnected_Systems->addAction(QIcon(":/images/mavs/generic.svg"), tr("View ") + uas->getName(), uas, SLOT(setSelected()));
+
+	// FIXME Should be not inside the mainwindow
+	connect(uas, SIGNAL(textMessageReceived(int,int,QString)), debugConsoleWidget, SLOT(receiveTextMessage(int,int,QString)));
 
     // Health / System status indicator
     infoWidget->addUAS(uas);

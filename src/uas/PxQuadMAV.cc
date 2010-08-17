@@ -1,8 +1,8 @@
 #include "PxQuadMAV.h"
 #include "GAudioOutput.h"
 
-PxQuadMAV::PxQuadMAV(MAVLinkProtocol* mavlink, int id) :
-        UAS(mavlink, id)
+PxQuadMAV::PxQuadMAV(int id) :
+        UAS(id)
 {
 }
 
@@ -14,18 +14,18 @@ PxQuadMAV::PxQuadMAV(MAVLinkProtocol* mavlink, int id) :
  *             messages can be sent back to the system via this link
  * @param message MAVLink message, as received from the MAVLink protocol stack
  */
-void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
+void PxQuadMAV::handleMessage(const mavlink_message_t& message)
 {
     // Let UAS handle the default message set
-    UAS::receiveMessage(link, message);
-    mavlink_message_t* msg = &message;
+    UAS::handleMessage(message);
+    const mavlink_message_t* msg = &message;
 
     //qDebug() << "PX RECEIVED" << msg->sysid << msg->compid << msg->msgid;
 
 // Only compile this portion if matching MAVLink packets have been compiled
 #ifdef MAVLINK_ENABLED_PIXHAWK_MESSAGES
 
-    if (message.sysid == uasId)
+    if (message.sysid == getID())
     {
         QString uasState;
         QString stateDescription;
@@ -37,8 +37,8 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 mavlink_raw_aux_t raw;
                 mavlink_msg_raw_aux_decode(&message, &raw);
                 quint64 time = getUnixTime(0);
-                emit valueChanged(uasId, "Pressure", raw.baro, time);
-                emit valueChanged(uasId, "Temperature", raw.temp, time);
+                emit valueChanged(getID(), "Pressure", raw.baro, time);
+                emit valueChanged(getID(), "Temperature", raw.temp, time);
             }
             break;
         case MAVLINK_MSG_ID_PATTERN_DETECTED:
@@ -51,9 +51,9 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 b.append('\0');
                 QString name = QString(b);
                 if (detected.type == 0)
-                    emit patternDetected(uasId, name, detected.confidence, detected.detected);
+                    emit patternDetected(getID(), name, detected.confidence, detected.detected);
                 else if (detected.type == 1)
-                    emit letterDetected(uasId, name, detected.confidence, detected.detected);
+                    emit letterDetected(getID(), name, detected.confidence, detected.detected);
             }
             break;
     case MAVLINK_MSG_ID_WATCHDOG_HEARTBEAT:
@@ -61,7 +61,7 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 mavlink_watchdog_heartbeat_t payload;
                 mavlink_msg_watchdog_heartbeat_decode(msg, &payload);
 
-                emit watchdogReceived(this->uasId, payload.watchdog_id, payload.process_count);
+                emit watchdogReceived(this->getID(), payload.watchdog_id, payload.process_count);
             }
             break;
 
@@ -70,7 +70,7 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 mavlink_watchdog_process_info_t payload;
                 mavlink_msg_watchdog_process_info_decode(msg, &payload);
 
-                emit processReceived(this->uasId, payload.watchdog_id, payload.process_id, QString((const char*)payload.name), QString((const char*)payload.arguments), payload.timeout);
+                emit processReceived(this->getID(), payload.watchdog_id, payload.process_id, QString((const char*)payload.name), QString((const char*)payload.arguments), payload.timeout);
             }
             break;
 
@@ -78,7 +78,7 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
             {
                 mavlink_watchdog_process_status_t payload;
                 mavlink_msg_watchdog_process_status_decode(msg, &payload);
-                emit processChanged(this->uasId, payload.watchdog_id, payload.process_id, payload.state, (payload.muted == 1) ? true : false, payload.crashes, payload.pid);
+                emit processChanged(this->getID(), payload.watchdog_id, payload.process_id, payload.state, (payload.muted == 1) ? true : false, payload.crashes, payload.pid);
             }
             break;
     case MAVLINK_MSG_ID_DEBUG_VECT:
@@ -87,9 +87,9 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 mavlink_msg_debug_vect_decode(msg, &vect);
                 QString str((const char*)vect.name);
                 quint64 time = getUnixTime(vect.usec);
-                emit valueChanged(uasId, str+".x", vect.x, time);
-                emit valueChanged(uasId, str+".y", vect.y, time);
-                emit valueChanged(uasId, str+".z", vect.z, time);
+                emit valueChanged(getID(), str+".x", vect.x, time);
+                emit valueChanged(getID(), str+".y", vect.y, time);
+                emit valueChanged(getID(), str+".z", vect.z, time);
             }
             break;
     case MAVLINK_MSG_ID_VISION_POSITION_ESTIMATE:
@@ -97,13 +97,13 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 mavlink_vision_position_estimate_t pos;
                 mavlink_msg_vision_position_estimate_decode(&message, &pos);
                 quint64 time = getUnixTime(pos.usec);
-                //emit valueChanged(uasId, "vis. time", pos.usec, time);
-                emit valueChanged(uasId, "vis. roll", pos.roll, time);
-                emit valueChanged(uasId, "vis. pitch", pos.pitch, time);
-                emit valueChanged(uasId, "vis. yaw", pos.yaw, time);
-                emit valueChanged(uasId, "vis. x", pos.x, time);
-                emit valueChanged(uasId, "vis. y", pos.y, time);
-                emit valueChanged(uasId, "vis. z", pos.z, time);
+                //emit valueChanged(getID(), "vis. time", pos.usec, time);
+                emit valueChanged(getID(), "vis. roll", pos.roll, time);
+                emit valueChanged(getID(), "vis. pitch", pos.pitch, time);
+                emit valueChanged(getID(), "vis. yaw", pos.yaw, time);
+                emit valueChanged(getID(), "vis. x", pos.x, time);
+                emit valueChanged(getID(), "vis. y", pos.y, time);
+                emit valueChanged(getID(), "vis. z", pos.z, time);
             }
             break;
     case MAVLINK_MSG_ID_AUX_STATUS:
@@ -111,11 +111,11 @@ void PxQuadMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
                 mavlink_aux_status_t status;
                 mavlink_msg_aux_status_decode(&message, &status);
                 emit loadChanged(this, status.load/10.0f);
-                emit errCountChanged(uasId, "IMU", "I2C0", status.i2c0_err_count);
-                emit errCountChanged(uasId, "IMU", "I2C1", status.i2c1_err_count);
-                emit errCountChanged(uasId, "IMU", "SPI0", status.spi0_err_count);
-                emit errCountChanged(uasId, "IMU", "SPI1", status.spi1_err_count);
-                emit errCountChanged(uasId, "IMU", "UART", status.uart_total_err_count);
+                emit errCountChanged(getID(), "IMU", "I2C0", status.i2c0_err_count);
+                emit errCountChanged(getID(), "IMU", "I2C1", status.i2c1_err_count);
+                emit errCountChanged(getID(), "IMU", "SPI0", status.spi0_err_count);
+                emit errCountChanged(getID(), "IMU", "SPI1", status.spi1_err_count);
+                emit errCountChanged(getID(), "IMU", "UART", status.uart_total_err_count);
                 qDebug() << "System Load:" << status.load;
                 emit UAS::valueChanged(this, "Load", ((float)status.load)/1000.0f, MG::TIME::getGroundTimeNow());
             }
@@ -149,13 +149,13 @@ void PxQuadMAV::sendProcessCommand(int watchdogId, int processId, unsigned int c
 {
 #ifdef MAVLINK_ENABLED_PIXHAWK_MESSAGES
     mavlink_watchdog_command_t payload;
-    payload.target_system_id = uasId;
+    payload.target_system_id = getID();
     payload.watchdog_id = watchdogId;
     payload.process_id = processId;
     payload.command_id = (uint8_t)command;
 
     mavlink_message_t msg;
-    mavlink_msg_watchdog_command_encode(mavlink->getSystemId(), mavlink->getComponentId(), &msg, &payload);
+    mavlink_msg_watchdog_command_encode(MG::SYSTEM::ID, MG::SYSTEM::COMPID, &msg, &payload);
     sendMessage(msg);
 #endif
 }

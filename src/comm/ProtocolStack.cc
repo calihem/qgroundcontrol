@@ -259,9 +259,20 @@ int ProtocolStack::registerProtocol(int linkID, ProtocolType protocolType)
 
 	linkProtocolMap.insert(link, protocol);
 
-	connect( link, SIGNAL(dataReceived(int, const QByteArray&)),
-		 protocol, SLOT(handleLinkInput(int, const QByteArray&)) );
-		
+	if (link->getReadingMode() == LinkInterface::AutoReading)
+	{
+		connect( link, SIGNAL(dataReceived(int, const QByteArray&)),
+			protocol, SLOT(handleLinkInput(int, const QByteArray&)) );
+	}
+	else if (link->getReadingMode() == LinkInterface::ManualReading)
+	{
+		connect( link, SIGNAL(readyRead(int)),
+			protocol, SLOT(readFromLink(int)) );
+	}
+
+	connect( protocol, SIGNAL(dataToSend(const QByteArray&)),
+			link, SLOT(write(const QByteArray&)) );
+
 	return 0;
 }
 

@@ -138,17 +138,17 @@ void MapWidget::updateGlobalPosition(UASInterface* uas, double lat, double lon, 
         // Points with a circle
         // A QPen can be used to customize the
         //pointpen->setWidth(3);
-        //points.append(new CirclePoint(lat, lon, 10, uas->getUASName(), Point::Middle, pointpen));
+        //points.append(new CirclePoint(lat, lon, 10, uas->getName(), Point::Middle, pointpen));
 
-        if (!uasIcons.contains(uas->getUASID()))
+        if (!uasIcons.contains(uas->getID()))
         {
             // Get the UAS color
             QColor uasColor = uas->getColor();
 
             // Icon
             QPen* pointpen = new QPen(uasColor);
-            CirclePoint* p = new CirclePoint(lat, lon, 10, uas->getUASName(), Point::Middle, pointpen);
-            uasIcons.insert(uas->getUASID(), p);
+            CirclePoint* p = new CirclePoint(lat, lon, 10, uas->getName(), Point::Middle, pointpen);
+            uasIcons.insert(uas->getID(), p);
             osmLayer->addGeometry(p);
 
             // Line
@@ -159,18 +159,18 @@ void MapWidget::updateGlobalPosition(UASInterface* uas, double lat, double lon, 
             QPen* linepen = new QPen(uasColor.darker());
             linepen->setWidth(2);
             // Add the Points and the QPen to a LineString
-            LineString* ls = new LineString(points, uas->getUASName(), linepen);
-            uasTrails.insert(uas->getUASID(), ls);
+            LineString* ls = new LineString(points, uas->getName(), linepen);
+            uasTrails.insert(uas->getID(), ls);
 
             // Add the LineString to the layer
             osmLayer->addGeometry(ls);
         }
         else
         {
-            CirclePoint* p = uasIcons.value(uas->getUASID());
+            CirclePoint* p = uasIcons.value(uas->getID());
             p->setCoordinate(QPointF(lat, lon));
             // Extend trail
-            uasTrails.value(uas->getUASID())->addPoint(new Point(lat, lon, QString("lat: %1 lon: %2").arg(lat, lon)));
+            uasTrails.value(uas->getID())->addPoint(new Point(lat, lon, QString("lat: %1 lon: %2").arg(lat, lon)));
         }
 
         //    points.append(new CirclePoint(8.275145, 50.016992, 15, "Wiesbaden-Mainz-Kastel, Johannes-Goßner-Straße", Point::Middle, pointpen));

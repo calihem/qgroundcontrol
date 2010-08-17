@@ -54,13 +54,13 @@ class ProtocolInterface : public QThread
 		virtual const QString& getName() const;
 
 	public slots:
-// 		virtual void receiveBytes(LinkInterface* link) = 0;
-// 		virtual void readFromLink(int linkID) = 0;
+		virtual void readFromLink(int linkID) = 0;
 		virtual void handleLinkInput(int linkID, const QByteArray& data) = 0;
 
 	signals:
 		/** @brief Update the packet loss from one system */
 		void receiveLossChanged(int uasId, float loss);
+		void dataToSend(const QByteArray& data);
 
 	protected:
 		QString name;
@@ -73,4 +73,5 @@ inline const QString& ProtocolInterface::getName() const
 {
 	return name;
 }
+
 #endif // _PROTOCOLINTERFACE_H_

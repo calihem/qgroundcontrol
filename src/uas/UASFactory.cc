@@ -56,40 +56,46 @@ UASManager* UASManager::instance() {
 UASManager::UASManager() :
         activeUAS(NULL)
 {
+    systems = QMap<int, UASInterface*>();
+    start(QThread::LowPriority);
 }
 
 UASManager::~UASManager()
 {
 }
 
+
+void UASManager::run()
+{
+}
+
 void UASManager::addUAS(UASInterface* uas)
 {
-	if (!uas) return;
-	// Only execute if there is no UAS at this index
-	if (!systems.contains(uas->getID()))
-	{
-		systems.insert(uas->getID(), uas);
-		emit UASCreated(uas);
-	}
+    // Only execute if there is no UAS at this index
+    if (!systems.contains(uas->getID()))
+    {
+        systems.insert(uas->getID(), uas);
+        emit UASCreated(uas);
+    }
 
-	// If there is no active UAS yet, set the first one as the active UAS
-	if (activeUAS == NULL)
-	{
-		activeUAS = uas;
-		emit activeUASSet(uas);
-		emit activeUASSet(uas->getID());
-	}
+    // If there is no active UAS yet, set the first one as the active UAS
+    if (activeUAS == NULL)
+    {
+        activeUAS = uas;
+        emit activeUASSet(uas);
+        emit activeUASSet(uas->getID());
+    }
 }
 
 UASInterface* UASManager::getActiveUAS()
 {
-	if(!activeUAS)
-	{
-		QMessageBox msgBox;
-		msgBox.setText(tr("No Micro Air Vehicle connected. Please connect one first."));
-		msgBox.exec();
-	}
-	return activeUAS; ///< Return zero pointer if no UAS has been loaded
+    if(!activeUAS)
+    {
+        QMessageBox msgBox;
+        msgBox.setText(tr("No Micro Air Vehicle connected. Please connect one first."));
+        msgBox.exec();
+    }
+    return activeUAS; ///< Return zero pointer if no UAS has been loaded
 }
 
 bool UASManager::launchActiveUAS()
@@ -156,15 +162,16 @@ UASInterface* UASManager::getUASForId(int id)
 
 void UASManager::setActiveUAS(UASInterface* uas)
 {
-	if (!uas) return;
+    if (uas != NULL)
+    {
+        activeUASMutex.lock();
+        activeUAS = uas;
+        activeUASMutex.unlock();
 
-	activeUASMutex.lock();
-	activeUAS = uas;
-	activeUASMutex.unlock();
+        qDebug() << __FILE__ << ":" << __LINE__ << " ACTIVE UAS SET TO: " << uas->getName();
 
-	qDebug() << __FILE__ << ":" << __LINE__ << " ACTIVE UAS SET TO: " << uas->getName();
-
-	emit activeUASSet(uas);
-	emit activeUASSet(uas->getID());
+        emit activeUASSet(uas);
+        emit activeUASSet(uas->getID());
+    }
 }
 

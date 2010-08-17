@@ -2,8 +2,8 @@
 
 #include <QDebug>
 
-SlugsMAV::SlugsMAV(MAVLinkProtocol* mavlink, int id) :
-        UAS(mavlink, id)//,
+SlugsMAV::SlugsMAV(int id) :
+        UAS(id)//,
         // Place other initializers here
 {
 }
@@ -16,10 +16,10 @@ SlugsMAV::SlugsMAV(MAVLinkProtocol* mavlink, int id) :
  *             messages can be sent back to the system via this link
  * @param message MAVLink message, as received from the MAVLink protocol stack
  */
-void SlugsMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
+void SlugsMAV::handleMessage(const mavlink_message_t& message)
 {
     // Let UAS handle the default message set
-    UAS::receiveMessage(link, message);
+    UAS::handleMessage(message);
 
     // Handle your special messages mavlink_message_t* msg = &message;
     switch (message.msgid)

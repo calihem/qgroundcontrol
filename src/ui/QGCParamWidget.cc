@@ -332,7 +332,7 @@ void QGCParamWidget::saveParameters()
 
     QTextStream in(&file);
 
-    in << "# Onboard parameters for system " << mav->getUASName() << "\n";
+    in << "# Onboard parameters for system " << mav->getName() << "\n";
     in << "#\n";
     in << "# MAV ID  COMPONENT ID  PARAM NAME  VALUE (FLOAT)\n";
 
@@ -347,7 +347,7 @@ void QGCParamWidget::saveParameters()
             QMap<QString, float>::iterator j;
             for (j = comp->begin(); j != comp->end(); ++j)
             {
-                in << mav->getUASID() << "\t" << compid << "\t" << j.key() << "\t" << j.value() << "\n";
+                in << mav->getID() << "\t" << compid << "\t" << j.key() << "\t" << j.value() << "\n";
                 in.flush();
             }
         }
@@ -375,7 +375,7 @@ void QGCParamWidget::loadParameters()
             if (wpParams.size() == 4)
             {
                 // Only load parameters for right mav
-                if (mav->getUASID() == wpParams.at(0).toInt())
+                if (mav->getID() == wpParams.at(0).toInt())
                 {
 
                     bool changed = false;
