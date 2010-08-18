@@ -142,32 +142,39 @@ protected:
     void loadWidgets();
     void connectActions();
     /**
-     * Clears the current view completely
+     * @brief Clears the current view completely
+     *
+     * Hide center and dock widgets.
      */
     void clearView();
+    /**
+     * @brief Build the center and dock widgets of main window
+     */
     void buildWidgets();
     void connectWidgets();
     void arrangeCenterStack();
     void configureWindowName();
 
     QSettings settings;
-    QPointer<UASControlWidget> controlWidget;
+
+    // Center widgets
+    QStackedWidget *centerStack;
     QPointer<Linecharts> linechartWidget;
-    QPointer<UASInfoWidget> infoWidget;
-    QPointer<CameraView> cameraWidget;
-    QPointer<UASListWidget> listWidget;
-    QPointer<WaypointList> waypointWidget;
-    QPointer<ObjectDetectionView> detectionWidget;
-    QPointer<HUD> hudWidget;
-    QPointer<DebugConsole> debugConsoleWidget;
-    QPointer<MapWidget> mapWidget;
-    QPointer<ParameterInterface> parameterWidget;
     QPointer<XMLCommProtocolWidget> protocolWidget;
-    QPointer<HDDisplay> hddWidget1;
-    QPointer<HDDisplay> hddWidget2;
-    QPointer<WatchdogControl> watchdogControlWidget;
-    QPointer<HSIDisplay> hsiWidget;
-    
+    QPointer<MapWidget> mapWidget;
+    QPointer<HUD> hudWidget;
+    // Dock widgets
+    QPointer<QDockWidget> controlDockWidget;
+    QPointer<QDockWidget> infoDockWidget;
+    QPointer<QDockWidget> listDockWidget;
+    QPointer<QDockWidget> waypointDockWidget;
+    QPointer<QDockWidget> detectionDockWidget;
+    QPointer<QDockWidget> debugConsoleDockWidget;
+    QPointer<QDockWidget> parameterDockWidget;
+    QPointer<QDockWidget> hddDockWidget1;
+    QPointer<QDockWidget> hddDockWidget2;
+    QPointer<QDockWidget> watchdogControlDockWidget;
+    QPointer<QDockWidget> hsiDockWidget;
     // Popup widgets
     JoystickWidget* joystickWidget;
 
@@ -182,8 +189,7 @@ protected:
     QAction* killUASAct;
     QAction* simulateUASAct;
 
-    QDockWidget* controlDock;
-    QStackedWidget* centerStack;
+//     QDockWidget* controlDock;
 
     LogCompressor* comp;
     QString screenFileName;
