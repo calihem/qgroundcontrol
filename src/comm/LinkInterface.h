@@ -106,6 +106,7 @@ class LinkInterface : public QThread {
 		 *
 		 * @return True if the connection is established, false otherwise
 		 **/
+		// FIXME rename to isOpened
 		virtual bool isConnected() const = 0;
 
 		/* Connection characteristics */
