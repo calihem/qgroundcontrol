@@ -29,8 +29,8 @@ This file is part of the QGROUNDCONTROL project
 
 #include "ArduPilotMAV.h"
 
-ArduPilotMAV::ArduPilotMAV(MAVLinkProtocol* mavlink, int id) :
-        UAS(mavlink, id)//,
+ArduPilotMAV::ArduPilotMAV(int id) :
+        UAS(id)//,
         // place other initializers here
 {
 }
@@ -43,10 +43,10 @@ ArduPilotMAV::ArduPilotMAV(MAVLinkProtocol* mavlink, int id) :
  *             messages can be sent back to the system via this link
  * @param message MAVLink message, as received from the MAVLink protocol stack
  */
-void ArduPilotMAV::receiveMessage(LinkInterface* link, mavlink_message_t message)
+void ArduPilotMAV::handleMessage(const mavlink_message_t& message)
 {
     // Let UAS handle the default message set
-    UAS::receiveMessage(link, message);
+    UAS::handleMessage(message);
 
     // Handle your special messages
     switch (message.msgid)

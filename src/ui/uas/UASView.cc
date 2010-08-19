@@ -94,13 +94,13 @@ UASView::UASView(UASInterface* uas, QWidget *parent) :
     // Set static values
 
     // Name
-    if (uas->getUASName() == "")
+    if (uas->getName() == "")
     {
-        m_ui->nameLabel->setText(tr("UAS") + QString::number(uas->getUASID()));
+        m_ui->nameLabel->setText(tr("UAS") + QString::number(uas->getID()));
     }
     else
     {
-        m_ui->nameLabel->setText(uas->getUASName());
+        m_ui->nameLabel->setText(uas->getName());
     }
 
     setBackgroundColor();
@@ -150,7 +150,7 @@ void UASView::setUASasActive(bool active)
 void UASView::updateMode(int sysId, QString status, QString description)
 {
     Q_UNUSED(description);
-    if (sysId == this->uas->getUASID()) m_ui->modeLabel->setText(status);
+    if (sysId == this->uas->getID()) m_ui->modeLabel->setText(status);
 }
 
 void UASView::mouseDoubleClickEvent (QMouseEvent * event)
@@ -265,7 +265,7 @@ void UASView::setWaypoint(int uasId, int id, double x, double y, double z, doubl
     Q_UNUSED(z);
     Q_UNUSED(yaw);
     Q_UNUSED(autocontinue);
-    if (uasId == this->uas->getUASID())
+    if (uasId == this->uas->getID())
     {
         if (current)
         {
@@ -276,7 +276,7 @@ void UASView::setWaypoint(int uasId, int id, double x, double y, double z, doubl
 
 void UASView::selectWaypoint(int uasId, int id)
 {
-    if (uasId == this->uas->getUASID())
+    if (uasId == this->uas->getID())
     {
         m_ui->waypointLabel->setText(tr("WP") + QString::number(id));
     }

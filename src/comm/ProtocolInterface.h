@@ -41,25 +41,38 @@ This file is part of the PIXHAWK project
  * @brief Interface for all protocols.
  *
  * This class defines the interface for
- * communication packets transported by the LinkManager.
+ * communication packets transported by the ProtocolStack.
  * 
- * @see LinkManager.
+ * @see ProtocolStack.
  * 
  **/
 class ProtocolInterface : public QThread
 {
-    Q_OBJECT
-public:
-    //virtual ~ProtocolInterface() {};
-    virtual QString getName() = 0;
+	Q_OBJECT
+	public:
+		virtual ~ProtocolInterface() {};
+		/** @brief Get the human-friendly name of this protocol */
+		virtual const QString& getName() const;
 
-public slots:
-    virtual void receiveBytes(LinkInterface *link, QByteArray b) = 0;
+	public slots:
+		virtual void readFromLink(int linkID) = 0;
+		virtual void handleLinkInput(int linkID, const QByteArray& data) = 0;
 
-signals:
-    /** @brief Update the packet loss from one system */
-    void receiveLossChanged(int uasId, float loss);
+	signals:
+		/** @brief Update the packet loss from one system */
+		void receiveLossChanged(int uasId, float loss);
+		void dataToSend(const QByteArray& data);
 
+	protected:
+		QString name;
 };
+
+// ----------------------------------------------------------------------------
+// Inline Implementations
+// ----------------------------------------------------------------------------
+inline const QString& ProtocolInterface::getName() const
+{
+	return name;
+}
 
 #endif // _PROTOCOLINTERFACE_H_

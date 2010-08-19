@@ -27,6 +27,7 @@ This file is part of the PIXHAWK project
  *   @brief Implementation of configuration window for serial links
  *
  *   @author Lorenz Meier <mavteam@student.ethz.ch>
+ *   @author Michael Schulz <coding@calihem.de>
  *
  */
 
@@ -34,11 +35,8 @@ This file is part of the PIXHAWK project
 
 #include <SerialConfigurationWindow.h>
 #include <SerialLinkInterface.h>
+#include <qextserialenumerator.h>
 #include <QDir>
-#include <QFileInfoList>
-#ifdef _WIN32
-#include <QextSerialEnumerator.h>
-#endif
 #if defined (__APPLE__) && defined (__MACH__)
 #include <stdio.h>
 #include <string.h>
@@ -57,8 +55,7 @@ This file is part of the PIXHAWK project
 
 #ifdef __MWERKS__
 #define __CF_USE_FRAMEWORK_INCLUDES__
-#endif
-
+#endif // __MWERKS__
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -228,295 +225,375 @@ static kern_return_t GetModemPath(io_iterator_t serialPortIterator, char *bsdPat
 }
 #endif
 
-SerialConfigurationWindow::SerialConfigurationWindow(LinkInterface* link, QWidget *parent, Qt::WindowFlags flags) : QWidget(parent, flags),
-userConfigured(false)
+SerialConfigurationWindow::SerialConfigurationWindow(SerialLinkInterface* link, QWidget *parent, Qt::WindowFlags flags) :
+	QWidget(parent, flags),
+	serialLink(link)
 {
-    SerialLinkInterface* serialLink = dynamic_cast<SerialLinkInterface*>(link);
+	if (!serialLink)
+	{
+		qDebug() << "Link is NOT a serial link, can't open configuration window";
+		return;
+	}
 
-    if(serialLink != 0)
-    {
-        this->link = serialLink;
+	ui.setupUi(this);
+	ui.portNameComboBox->setSizeAdjustPolicy(QComboBox::AdjustToContentsOnFirstShow);
+	ui.baudRateComboBox->setSizeAdjustPolicy(QComboBox::AdjustToContentsOnFirstShow);
 
-        // Setup the user interface according to link type
-        ui.setupUi(this);
+	fillPortNameComboBox();
+	fillBaudRateComboBox();
 
-        // Create action to open this menu
-        // Create configuration action for this link
-        // Connect the current UAS
-        action = new QAction(QIcon(":/images/devices/network-wireless.svg"), "", link);
-        setLinkName(link->getName());
-        connect(action, SIGNAL(triggered()), this, SLOT(configureCommunication()));
+	loadSettingsFromPort();
 
-        // Make sure that a change in the link name will be reflected in the UI
-        connect(link, SIGNAL(nameChanged(QString)), this, SLOT(setLinkName(QString)));
+	portCheckTimer.setInterval(1000);
 
-        // Connect the individual user interface inputs
-        connect(ui.portName, SIGNAL(editTextChanged(QString)), this, SLOT(setPortName(QString)));
-        connect(ui.portName, SIGNAL(currentIndexChanged(QString)), this, SLOT(setPortName(QString)));
-        connect(ui.baudRate, SIGNAL(activated(int)), this->link, SLOT(setBaudRateType(int)));
-        connect(ui.flowControlCheckBox, SIGNAL(toggled(bool)), this, SLOT(enableFlowControl(bool)));
-        connect(ui.parNone, SIGNAL(toggled(bool)), this, SLOT(setParityNone()));
-        connect(ui.parOdd, SIGNAL(toggled(bool)), this, SLOT(setParityOdd()));
-        connect(ui.parEven, SIGNAL(toggled(bool)), this, SLOT(setParityEven()));
-        connect(ui.dataBitsSpinBox, SIGNAL(valueChanged(int)), this->link, SLOT(setDataBitsType(int)));
-        connect(ui.stopBitsSpinBox, SIGNAL(valueChanged(int)), this->link, SLOT(setStopBitsType(int)));
+	setupSignals();
 
-        setupPortList();
-
-        //connect(this->link, SIGNAL(connected(bool)), this, SLOT());
-        ui.portName->setSizeAdjustPolicy(QComboBox::AdjustToContentsOnFirstShow);
-        ui.baudRate->setSizeAdjustPolicy(QComboBox::AdjustToContentsOnFirstShow);
-
-        switch(this->link->getParityType())
-        {
-        case 0:
-            ui.parNone->setChecked(true);
-            break;
-        case 1:
-            ui.parOdd->setChecked(true);
-            break;
-        case 2:
-            ui.parEven->setChecked(true);
-            break;
-        default:
-            // Enforce default: no parity in link
-            setParityNone();
-            ui.parNone->setChecked(true);
-            break;
-        }
-
-        switch(this->link->getFlowType()) {
-        case 0:
-            ui.flowControlCheckBox->setChecked(false);
-            break;
-        case 1:
-            ui.flowControlCheckBox->setChecked(true);
-            break;
-        default:
-            ui.flowControlCheckBox->setChecked(false);
-            enableFlowControl(false);
-        }
-
-        ui.baudRate->setCurrentIndex(this->link->getBaudRateType());
-
-        ui.dataBitsSpinBox->setValue(this->link->getDataBitsType() + 5);
-        ui.stopBitsSpinBox->setValue(this->link->getStopBitsType() + 1);
-
-        portCheckTimer = new QTimer(this);
-        portCheckTimer->setInterval(1000);
-        connect(portCheckTimer, SIGNAL(timeout()), this, SLOT(setupPortList()));
-
-        // Display the widget
-        this->window()->setWindowTitle(tr("Serial Communication Settings"));
-        this->show();
-    }
-    else
-    {
-        qDebug() << "Link is NOT a serial link, can't open configuration window";
-
-    }
+	// Display the widget
+	show();
 }
 
 SerialConfigurationWindow::~SerialConfigurationWindow() {
 
 }
 
-void SerialConfigurationWindow::showEvent(QShowEvent* event)
+void SerialConfigurationWindow::fillPortNameComboBox()
 {
-    if (event->isAccepted())
-    {
-        portCheckTimer->start();
-    }
+	ui.portNameComboBox->clear();
+
+#ifdef _TTY_WIN
+	QextPortInfo portInfo;
+	QList<QextPortInfo> portList = QextSerialEnumerator::getPorts();
+	foreach (portInfo, portList)
+	{
+		ui.portNameComboBox->addItem( portInfo.physName );
+	}
+#elif defined Q_OS_LINUX
+	// TODO Linux has no standard way of enumerating serial ports
+	// However the device files are only present when the physical
+	// device is connected, therefore listing the files should be
+	// sufficient.
+
+	QDir devdir = QDir("/dev");
+	QStringList filters;
+	filters << "rfcomm*" << "ttyUSB*" << "ttyS*";
+
+	//apply filter on directory
+	devdir.setNameFilters(filters);
+	devdir.setFilter( QDir::System | QDir::CaseSensitive );
+	QStringList entries = devdir.entryList();
+
+	QString entry;
+	foreach (entry, entries)
+	{
+		ui.portNameComboBox->addItem(devdir.absolutePath() + "/" + entry);
+	}
+#elif defined (__APPLE__) && defined (__MACH__)
+	// Enumerate serial ports
+	//int            fileDescriptor;
+	kern_return_t    kernResult; // on PowerPC this is an int (4 bytes)
+
+	io_iterator_t    serialPortIterator;
+	char        bsdPath[MAXPATHLEN];
+
+	kernResult = FindModems(&serialPortIterator);
+
+	kernResult = GetModemPath(serialPortIterator, bsdPath, sizeof(bsdPath));
+
+	IOObjectRelease(serialPortIterator);    // Release the iterator.
+
+	// Add found modems
+	if (bsdPath[0])
+	{
+		if (ui.portNameComboBox->findText(QString(bsdPath)) == -1)
+		{
+			ui.portNameComboBox->addItem(QString(bsdPath));
+			if (!userConfigured) ui.portNameComboBox->setEditText(QString(bsdPath));
+		}
+	}
+
+	// Add USB serial port adapters
+	// TODO Strangely usb serial port adapters are not enumerated, even when connected
+	QString devdir = "/dev";
+	QDir dir(devdir);
+	dir.setFilter(QDir::System);
+
+	QFileInfoList list = dir.entryInfoList();
+	for (int i = list.size() - 1; i >= 0; i--)
+	{
+		QFileInfo fileInfo = list.at(i);
+		if (fileInfo.fileName().contains(QString("ttyUSB")) || fileInfo.fileName().contains(QString("ttyS")) || fileInfo.fileName().contains(QString("tty.usbserial")))
+		{
+			if (ui.portNameComboBox->findText(fileInfo.canonicalFilePath()) == -1)
+			{
+				ui.portNameComboBox->addItem(fileInfo.canonicalFilePath());
+				if (!userConfigured) ui.portNameComboBox->setEditText(fileInfo.canonicalFilePath());
+			}
+		}
+	}
+#endif // (__APPLE__) && defined (__MACH__)
+	if (ui.portNameComboBox->count() == 0)
+	{
+		qCritical("No serial ports available on system");
+	}
 }
 
-void SerialConfigurationWindow::hideEvent(QHideEvent* event)
+void SerialConfigurationWindow::fillBaudRateComboBox()
 {
-    if (event->isAccepted())
-    {
-        portCheckTimer->stop();
-    }
-}
-
-QAction* SerialConfigurationWindow::getAction()
-{
-    return action;
-}
-
-void SerialConfigurationWindow::configureCommunication()
-{
-    QString selected = ui.portName->currentText();
-    setupPortList();
-    ui.portName->setEditText(selected);
-    this->show();
-}
-
-void SerialConfigurationWindow::setupPortList()
-{
-    //ui.portName->clear();
-    // Get list of existing items
-
-
-#ifdef __linux
-
-    // TODO Linux has no standard way of enumerating serial ports
-    // However the device files are only present when the physical
-    // device is connected, therefore listing the files should be
-    // sufficient.
-
-    QString devdir = "/dev";
-    QDir dir(devdir);
-    dir.setFilter(QDir::System);
-
-    QFileInfoList list = dir.entryInfoList();
-    for (int i = 0; i < list.size(); ++i) {
-        QFileInfo fileInfo = list.at(i);
-        if (fileInfo.fileName().contains(QString("ttyUSB")) || fileInfo.fileName().contains(QString("ttyS")))
-        {
-            if (ui.portName->findText(fileInfo.canonicalFilePath()) == -1)
-            {
-                ui.portName->addItem(fileInfo.canonicalFilePath());
-                if (!userConfigured) ui.portName->setEditText(fileInfo.canonicalFilePath());
-            }
-        }
-    }
+	ui.baudRateComboBox->clear();
+#ifdef _TTY_POSIX_
+	ui.baudRateComboBox->addItem("50", BAUD50);
+	ui.baudRateComboBox->addItem("75", BAUD75);
 #endif
-
-#if defined (__APPLE__) && defined (__MACH__)
-
-    // Enumerate serial ports
-    //int            fileDescriptor;
-    kern_return_t    kernResult; // on PowerPC this is an int (4 bytes)
-
-    io_iterator_t    serialPortIterator;
-    char        bsdPath[MAXPATHLEN];
-
-    kernResult = FindModems(&serialPortIterator);
-
-    kernResult = GetModemPath(serialPortIterator, bsdPath, sizeof(bsdPath));
-
-    IOObjectRelease(serialPortIterator);    // Release the iterator.
-
-    // Add found modems
-    if (bsdPath[0])
-    {
-        if (ui.portName->findText(QString(bsdPath)) == -1)
-        {
-            ui.portName->addItem(QString(bsdPath));
-            if (!userConfigured) ui.portName->setEditText(QString(bsdPath));
-        }
-    }
-
-    // Add USB serial port adapters
-    // TODO Strangely usb serial port adapters are not enumerated, even when connected
-    QString devdir = "/dev";
-    QDir dir(devdir);
-    dir.setFilter(QDir::System);
-
-    QFileInfoList list = dir.entryInfoList();
-    for (int i = list.size() - 1; i >= 0; i--)
-    {
-        QFileInfo fileInfo = list.at(i);
-        if (fileInfo.fileName().contains(QString("ttyUSB")) || fileInfo.fileName().contains(QString("ttyS")) || fileInfo.fileName().contains(QString("tty.usbserial")))
-        {
-            if (ui.portName->findText(fileInfo.canonicalFilePath()) == -1)
-            {
-                ui.portName->addItem(fileInfo.canonicalFilePath());
-                if (!userConfigured) ui.portName->setEditText(fileInfo.canonicalFilePath());
-            }
-        }
-    }
-
-
+	ui.baudRateComboBox->addItem("110", BAUD110);
+#ifdef _TTY_POSIX_
+	ui.baudRateComboBox->addItem("134", BAUD134);
+	ui.baudRateComboBox->addItem("150", BAUD150);
+	ui.baudRateComboBox->addItem("200", BAUD200);
 #endif
+	ui.baudRateComboBox->addItem("300", BAUD300);
+	ui.baudRateComboBox->addItem("600",BAUD600);
+	ui.baudRateComboBox->addItem("1200", BAUD1200);
+#ifdef _TTY_POSIX_
+	ui.baudRateComboBox->addItem("1800", BAUD1800);
+#endif
+	ui.baudRateComboBox->addItem("2400", BAUD2400);
+	ui.baudRateComboBox->addItem("4800", BAUD4800);
+	ui.baudRateComboBox->addItem("9600", BAUD9600);
+#ifdef _TTY_WIN_
+	ui.baudRateComboBox->addItem("14400", BAUD14400);
+#endif
+	ui.baudRateComboBox->addItem("19200", BAUD19200);
+	ui.baudRateComboBox->addItem("38400", BAUD38400);
+#ifdef _TTY_WIN_
+	ui.baudRateComboBox->addItem("56000", BAUD56000);
+#endif
+	ui.baudRateComboBox->addItem("57600", BAUD57600);
+#ifdef _TTY_POSIX_
+	ui.baudRateComboBox->addItem("76800", BAUD76800);
+#endif
+	ui.baudRateComboBox->addItem("115200", BAUD115200);
+#ifdef _TTY_WIN_
+	ui.baudRateComboBox->addItem("128000", BAUD128000);
+	ui.baudRateComboBox->addItem("256000", BAUD256000);
+#endif
+}
 
+void SerialConfigurationWindow::loadSettingsFromPort()
+{
+	if (!serialLink) return;
+	
+	// Set port name
+	loadPortNameFromPort();
+	
+	// Set baud rate
+	int index = ui.baudRateComboBox->findData( serialLink->getBaudRate() );
+	if (index == -1) qDebug("Unsupported baud rate in Serial Configuration Window");
+	ui.baudRateComboBox->setCurrentIndex(index);
+	
+	// Set flow control
+	if (serialLink->getFlowControl() != FLOW_OFF)
+	{
+		enableFlowControl(true);
+	}
+
+	// Set parity
+	switch ( serialLink->getParity() )
+	{
+		case PAR_NONE:
+			ui.parNone->setChecked(true);
+			break;
+		case PAR_ODD:
+			ui.parOdd->setChecked(true);
+			break;
+		case PAR_EVEN:
+			ui.parEven->setChecked(true);
+			break;
+		default:
+			qDebug() << "Unsupported parity in Serial Configuration Window";
+			break;
+	}
+
+	// Set data bits
+	ui.dataBitsSpinBox->setValue( (int)serialLink->getDataBits() + 5);
+
+	// Set stop bits
+	switch( serialLink->getStopBits() )
+	{
+		case STOP_1:
+			ui.stopBitsSpinBox->setValue(1);
+			break;
+		case STOP_2:
+			ui.stopBitsSpinBox->setValue(2);
+			break;
+		default:
+			qDebug() << "Unsupported stop bits in Serial Configuration Window";
+			break;
+	}
+}
+
+void SerialConfigurationWindow::loadPortNameFromPort()
+{
+	if (!serialLink) return;
+
+	// if necessary add port name of serial link to combobox
+	if (serialLink->getPortName() != "")
+	{ // port name set
+		int index = ui.portNameComboBox->findText( serialLink->getPortName() );
+		if (index == -1)
+		{ // port name of serial link is no combobox entry
+			ui.portNameComboBox->addItem( serialLink->getPortName() );
+		}
+		// set entry in combobox
+		ui.portNameComboBox->setCurrentIndex(index);
+	}
+	else
+	{ // no port name set
+		// take first entry in combobox
+		serialLink->setPortName( ui.portNameComboBox->itemText(0) );
+	}
+
+	// Set window title
+	setTitleToPortName( serialLink->getPortName() );
+}
+
+void SerialConfigurationWindow::setupSignals()
+{
+	if (!serialLink) return;
+	
+	// Make sure that a change in the link name will be reflected in the UI
+	connect(serialLink, SIGNAL(nameChanged(const QString&)),
+		this, SLOT(setTitleToPortName(const QString&)));
+	// Connect the individual user interface inputs
+	connect(ui.portNameComboBox, SIGNAL(editTextChanged(const QString&)),
+		this, SLOT(setPortName(const QString&)));
+	connect(ui.portNameComboBox, SIGNAL(currentIndexChanged(const QString&)),
+		this, SLOT(setPortName(const QString&)));
+	connect( &portCheckTimer, SIGNAL(timeout()),
+		 this, SLOT(refreshPortNameComboBox()) );
+	connect(ui.baudRateComboBox, SIGNAL(activated(int)),
+		this, SLOT(setBaudRate(int)));
+	connect(ui.flowControlCheckBox, SIGNAL(toggled(bool)),
+		this, SLOT(enableFlowControl(bool)));
+	connect(ui.parNone, SIGNAL(toggled(bool)),
+		this, SLOT(setParityNone()));
+	connect(ui.parOdd, SIGNAL(toggled(bool)),
+		this, SLOT(setParityOdd()));
+	connect(ui.parEven, SIGNAL(toggled(bool)),
+		this, SLOT(setParityEven()));
+	connect(ui.dataBitsSpinBox, SIGNAL(valueChanged(int)),
+		this, SLOT(setDataBits(int)));
+	connect(ui.stopBitsSpinBox, SIGNAL(valueChanged(int)),
+		this, SLOT(setStopBits(int)));
+}
+
+void SerialConfigurationWindow::refreshPortNameComboBox()
+{
+	ui.portNameComboBox->disconnect();
+	fillPortNameComboBox();
+	loadPortNameFromPort();
+	connect(ui.portNameComboBox, SIGNAL(editTextChanged(const QString&)),
+		this, SLOT(setPortName(const QString&)));
+	connect(ui.portNameComboBox, SIGNAL(currentIndexChanged(const QString&)),
+		this, SLOT(setPortName(const QString&)));
+}
+
+void SerialConfigurationWindow::setPortName(const QString& portname)
+{
+	if (!serialLink) return;
+
+	QString newPort(portname);
 #ifdef _WIN32
-    // Get the ports available on this system
-    QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
-
-    // Add the ports in reverse order, because we prepend them to the list
-    for (int i = ports.size() - 1; i >= 0; i--)
-    {
-        QString portString = QString(ports.at(i).portName.toLocal8Bit().constData()) + " - " + QString(ports.at(i).friendName.toLocal8Bit().constData()).split("(").first();
-        // Prepend newly found port to the list
-        if (ui.portName->findText(portString) == -1)
-        {
-            ui.portName->insertItem(0, portString);
-            if (!userConfigured) ui.portName->setEditText(portString);
-        }
-    }
-
-    //printf("port name: %s\n", ports.at(i).portName.toLocal8Bit().constData());
-    //printf("friendly name: %s\n", ports.at(i).friendName.toLocal8Bit().constData());
-    //printf("physical name: %s\n", ports.at(i).physName.toLocal8Bit().constData());
-    //printf("enumerator name: %s\n", ports.at(i).enumName.toLocal8Bit().constData());
-    //printf("===================================\n\n");
+	newPort = newPort.split("-").first();
 #endif
+	newPort = newPort.remove(" ");
 
-    if (this->link)
-    {
-        if (this->link->getPortName() != "")
-        {
-            ui.portName->setEditText(this->link->getPortName());
-        }
-    }
+	if (serialLink->getPortName() != newPort)
+	{
+		serialLink->setPortName(newPort);
+	}
+}
+
+void SerialConfigurationWindow::setTitleToPortName(const QString& portname)
+{
+	setWindowTitle(tr("Configuration of ") + portname);
+}
+
+void SerialConfigurationWindow::setBaudRate(int index)
+{
+	if (!serialLink) return;
+	
+	serialLink->setBaudRate((BaudRateType)ui.baudRateComboBox->itemData(index).toInt());
 }
 
 void SerialConfigurationWindow::enableFlowControl(bool flow)
 {
-    if(flow)
-    {
-        link->setFlowType(1);
-    }
-    else
-    {
-        link->setFlowType(0);
-    }
+	if (!serialLink) return;
+
+	if(flow)
+		serialLink->setFlowControl(FLOW_HARDWARE);
+	else
+		serialLink->setFlowControl(FLOW_OFF);
 }
 
 void SerialConfigurationWindow::setParityNone()
 {
-    link->setParityType(0);
+	if (!serialLink) return;
+
+	serialLink->setParity(PAR_NONE);
 }
 
 void SerialConfigurationWindow::setParityOdd()
 {
-    link->setParityType(1);
+	if (!serialLink) return;
+
+	serialLink->setParity(PAR_ODD);
 }
 
 void SerialConfigurationWindow::setParityEven()
 {
-    link->setParityType(2);
+	if (!serialLink) return;
+
+	serialLink->setParity(PAR_EVEN);
 }
 
-void SerialConfigurationWindow::setPortName(QString port)
+void SerialConfigurationWindow::setDataBits(int bits)
 {
-#ifdef _WIN32
-    port = port.split("-").first();
-#endif
-    port = port.remove(" ");
+	if (!serialLink) return;
+	if (bits < 5 || bits > 8) return;
 
-    if (this->link->getPortName() != port)
-    {
-        link->setPortName(port);
-    }
-    userConfigured = true;
+	serialLink->setDataBits( DataBitsType(bits-5) );
+
 }
 
-void SerialConfigurationWindow::setLinkName(QString name)
+void SerialConfigurationWindow::setStopBits(int bits)
 {
-    Q_UNUSED(name);
-    // FIXME
-    action->setText(tr("Configure ") + link->getName());
-    action->setStatusTip(tr("Configure ") + link->getName());
-    setWindowTitle(tr("Configuration of ") + link->getName());
+	if (!serialLink) return;
+	
+	switch(bits)
+	{
+		case 1:
+			serialLink->setStopBits(STOP_1);
+			break;
+		case 2:
+			serialLink->setStopBits(STOP_2);
+			break;
+		default:
+			break;
+	}
 }
 
-void SerialConfigurationWindow::remove()
+void SerialConfigurationWindow::showEvent(QShowEvent* event)
 {
-    link->disconnect();
-    //delete link;
-    //delete action;
-    this->window()->close();
-    qDebug() << "TODO: Link cannot be deleted: SerialConfigurationWindow::remove() NOT IMPLEMENTED!";
+	if (event->isAccepted())
+	{
+		portCheckTimer.start();
+	}
 }
 
+void SerialConfigurationWindow::hideEvent(QHideEvent* event)
+{
+	if (event->isAccepted())
+	{
+		portCheckTimer.stop();
+	}
+}

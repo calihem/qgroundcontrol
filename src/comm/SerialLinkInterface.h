@@ -32,36 +32,35 @@ This file is part of the PIXHAWK project
 #ifndef SERIALLINKINTERFACE_H_
 #define SERIALLINKINTERFACE_H_
 
-#include <QObject>
-#include <QString>
-#include <qextserialport.h>
 #include <LinkInterface.h>
+#include <qextserialbase.h>
+#include <QString>
+
 
 class SerialLinkInterface : public LinkInterface {
 	Q_OBJECT
 
-public:
-	virtual QString getPortName() = 0;
-	virtual int getBaudRate() = 0;
-	virtual int getBaudRateType() = 0;
-	virtual int getFlowType() = 0;
-	virtual int getParityType() = 0;
-	virtual int getDataBitsType() = 0;
-	virtual int getStopBitsType() = 0;
+	public:
+		SerialLinkInterface(int id = -1, ReadingMode readingMode = AutoReading);
+		virtual const QString& getPortName() const = 0;
+		virtual BaudRateType getBaudRate() const = 0;
+		virtual FlowType getFlowControl() const = 0;
+		virtual ParityType getParity() const = 0;
+		virtual DataBitsType getDataBits() const = 0;
+		virtual StopBitsType getStopBits() const = 0;
 
-public slots:
-	virtual bool setPortName(QString portName) = 0;
-	virtual bool setBaudRate(int rate) = 0;
-	virtual bool setBaudRateType(int rateIndex) = 0;
-	virtual bool setFlowType(int flow) = 0;
-	virtual bool setParityType(int parity) = 0;
-	virtual bool setDataBitsType(int dataBits) = 0;
-	virtual bool setStopBitsType(int stopBits) = 0;
-
+	public slots:
+		virtual void setPortName(const QString& portName) = 0;
+		virtual void setBaudRate(BaudRateType baudrateType) = 0;
+		virtual void setFlowControl(FlowType flowType) = 0;
+		virtual void setParity(ParityType parityType) = 0;
+		virtual void setDataBits(DataBitsType dataBitsType) = 0;
+		virtual void setStopBits(StopBitsType stopBitsType) = 0;
 };
 
-
-/* Declare C++ interface as Qt interface */
-//Q_DECLARE_INTERFACE(SerialLinkInterface, "org.openground.comm.links.SerialLinkInterface/1.0")
+inline SerialLinkInterface::SerialLinkInterface(int id, ReadingMode readingMode) :
+	LinkInterface(id, readingMode)
+{
+}
 
 #endif // SERIALLINKINTERFACE_H_

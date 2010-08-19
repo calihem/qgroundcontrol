@@ -34,27 +34,22 @@ This file is part of the PIXHAWK project
 #include <QMutexLocker>
 #include <iostream>
 #include "UDPLink.h"
-#include "LinkManager.h"
 #include "MG.h"
 
-UDPLink::UDPLink(QHostAddress host, quint16 port)
+UDPLink::UDPLink(QHostAddress host, quint16 port) :
+	LinkInterface(-1, ManualReading),
+	host(host),
+	port(port),
+	socket(NULL),
+	connectState(false)
 {
-    this->host = host;
-    this->port = port;
-    this->connectState = false;
-    this->hosts = new QList<QHostAddress>();
-    //this->ports = new QMap<QHostAddress, quint16>();
-    this->ports = new QList<quint16>();
-
-    // Set unique ID and add link to the list of links
-    this->id = getNextLinkId();
-    this->name = tr("UDP link ") + QString::number(getId());
-    LinkManager::instance()->add(this);
+    // Set name
+    name = tr("UDP Link");
 }
 
 UDPLink::~UDPLink()
 {
-    disconnect();
+    close();
 }
 
 /**
@@ -63,9 +58,19 @@ UDPLink::~UDPLink()
  **/
 void UDPLink::run()
 {
+// 	loopForever = true;
+	loopForever = false;
+	while(loopForever)
+	{
+		// TODO: Block until new data is available
+		if (readingMode == AutoReading)
+		{
+			//TODO: read and emit
+		}
+	}
 }
 
-void UDPLink::setAddress(QString address)
+void UDPLink::setAddress(const QString& address)
 {
     Q_UNUSED(address);
     // FIXME TODO Implement address
@@ -74,26 +79,27 @@ void UDPLink::setAddress(QString address)
 
 void UDPLink::setPort(quint16 port)
 {
-    this->port = port;
+    UDPLink::port = port;
 }
 
 
-void UDPLink::writeBytes(const char* data, qint64 size)
+qint64 UDPLink::write(const char* data, qint64 size)
 {
     // Broadcast to all connected systems
     //QList<QHostAddress>::iterator h;
-    // for (h = hosts->begin(); h != hosts->end(); ++h)
+    // for (h = hosts.begin(); h != hosts.end(); ++h)
 
-    for (int h = 0; h < hosts->size(); h++)
+    qint64 writtenBytes = 0;
+    for (int h = 0; h < hosts.size(); h++)
     {
-        QHostAddress currentHost = hosts->at(h);
-        quint16 currentPort = ports->at(h);
-        //        QList<quint16> currentPorts = ports->values(currentHost);
+        QHostAddress currentHost = hosts.at(h);
+        quint16 currentPort = ports.at(h);
+        //        QList<quint16> currentPorts = ports.values(currentHost);
         //        for (int p = 0; p < currentPorts.size(); p++)
         //        {
         //            quint16 currentPort = currentPorts.at(p);
         //qDebug() << "Sent message to " << currentHost << ":" << currentPort << "at" << __FILE__ << ":" << __LINE__;
-        socket->writeDatagram(data, size, currentHost, currentPort);
+        writtenBytes = socket->writeDatagram(data, size, currentHost, currentPort);
         //        }
     }
 
@@ -112,6 +118,7 @@ void UDPLink::writeBytes(const char* data, qint64 size)
 //        fprintf(stderr,"%02x ", v);
 //    }
     //}
+    return writtenBytes;
 }
 
 /**
@@ -120,21 +127,22 @@ void UDPLink::writeBytes(const char* data, qint64 size)
  * @param data Pointer to the data byte array to write the bytes to
  * @param maxLength The maximum number of bytes to write
  **/
-void UDPLink::readBytes()
+qint64 UDPLink::read(char* data, qint64 maxLength)
 {
-    const qint64 maxLength = 2048;
-    char data[maxLength];
     QHostAddress sender;
     quint16 senderPort;
+    
+    qint64 datagramSize = socket->pendingDatagramSize();
+    if (datagramSize > maxLength)
+	    std::cerr << __FILE__ << __LINE__ << " UDP datagram overflow, allowed to read less bytes than datagram size" << std::endl;
 
-    unsigned int s = socket->pendingDatagramSize();
-    if (s > maxLength) std::cerr << __FILE__ << __LINE__ << " UDP datagram overflow, allowed to read less bytes than datagram size" << std::endl;
-    socket->readDatagram(data, maxLength, &sender, &senderPort);
+    qint64 receivedBytes = socket->readDatagram(data, maxLength, &sender, &senderPort);
 
     // FIXME TODO Check if this method is better than retrieving the data by individual processes
-    QByteArray b(data, s);
-    emit bytesReceived(this, b);
-
+    // FIXME avoid deep copying of data
+    QByteArray b(data, receivedBytes);
+//     emit bytesReceived(this, b);
+	emit dataReceived(id, b);
 //    // Echo data for debugging purposes
 //    std::cerr << __FILE__ << __LINE__ << "Received datagram:" << std::endl;
 //    int i;
@@ -147,18 +155,19 @@ void UDPLink::readBytes()
 
 
     // Add host to broadcast list if not yet present
-    if (!hosts->contains(sender))
+    if (!hosts.contains(sender))
     {
-        hosts->append(sender);
-        ports->append(senderPort);
-        //        ports->insert(sender, senderPort);
+        hosts.append(sender);
+        ports.append(senderPort);
+        //        ports.insert(sender, senderPort);
     }
     else
     {
-        int index = hosts->indexOf(sender);
-        ports->replace(index, senderPort);
+        int index = hosts.indexOf(sender);
+        ports.replace(index, senderPort);
     }
 
+    return receivedBytes;
 }
 
 
@@ -167,8 +176,16 @@ void UDPLink::readBytes()
  *
  * @return The number of bytes to read
  **/
-qint64 UDPLink::bytesAvailable() {
+qint64 UDPLink::bytesAvailable() const {
     return socket->pendingDatagramSize();
+}
+
+/**
+ * @brief Convenience method to emit the bytesReady signal
+ **/
+void UDPLink::emitReadyRead()
+{
+	emit readyRead(id);
 }
 
 /**
@@ -176,15 +193,18 @@ qint64 UDPLink::bytesAvailable() {
  *
  * @return True if connection has been disconnected, false if connection couldn't be disconnected.
  **/
-bool UDPLink::disconnect()
+bool UDPLink::close()
 {
+	//FIXME: stop thread first
+	
+	//FIXME: only emit closed, if state is QAbstractSocket::ConnectedState || QAbstractSocket::BoundState
     delete socket;
     socket = NULL;
 
     connectState = false;
 
-    emit disconnected();
-    emit connected(false);
+    emit closed();
+    emit opened(false);
     return !connectState;
 }
 
@@ -193,24 +213,31 @@ bool UDPLink::disconnect()
  *
  * @return True if connection has been established, false if connection couldn't be established.
  **/
-bool UDPLink::connect()
+bool UDPLink::open()
 {
-    socket = new QUdpSocket(this);
+	socket = new QUdpSocket(this);
+	if (!socket) return false;
 
     //QObject::connect(socket, SIGNAL(readyRead()), this, SLOT(readPendingDatagrams()));
-    QObject::connect(socket, SIGNAL(readyRead()), this, SLOT(readBytes()));
+	connectState = socket->bind(host, port);
 
-    connectState = socket->bind(host, port);
+	if (connectState)
+	{
+		emit opened(connectState);
+		emit opened();
+		connectionStartTime = MG::TIME::getGroundTimeNow();
 
-    emit connected(connectState);
-    if (connectState)
-    {
-        emit connected();
-        connectionStartTime = MG::TIME::getGroundTimeNow();
-    }
+		if (readingMode == AutoReading)
+		{
+			start(HighPriority);
+		}
+		else if (readingMode == ManualReading)
+		{
+			connect(socket, SIGNAL(readyRead()), this, SLOT(emitReadyRead()));
+		}
+	}
 
-    start(HighPriority);
-    return connectState;
+	return connectState;
 }
 
 /**
@@ -218,74 +245,57 @@ bool UDPLink::connect()
  *
  * @return True if link is connected, false otherwise.
  **/
-bool UDPLink::isConnected() {
+bool UDPLink::isConnected() const {
     return connectState;
 }
 
-int UDPLink::getId()
-{
-    return id;
-}
-
-QString UDPLink::getName()
-{
-    return name;
-}
-
-void UDPLink::setName(QString name)
-{
-    this->name = name;
-    emit nameChanged(this->name);
-}
-
-
-qint64 UDPLink::getNominalDataRate() {
+qint64 UDPLink::getNominalDataRate() const {
     return 54000000; // 54 Mbit
 }
 
-qint64 UDPLink::getTotalUpstream() {
+qint64 UDPLink::getTotalUpstream() const {
     statisticsMutex.lock();
     qint64 totalUpstream = bitsSentTotal / ((MG::TIME::getGroundTimeNow() - connectionStartTime) / 1000);
     statisticsMutex.unlock();
     return totalUpstream;
 }
 
-qint64 UDPLink::getCurrentUpstream() {
+qint64 UDPLink::getCurrentUpstream() const {
     return 0; // TODO
 }
 
-qint64 UDPLink::getMaxUpstream() {
+qint64 UDPLink::getMaxUpstream() const {
     return 0; // TODO
 }
 
-qint64 UDPLink::getBitsSent() {
+qint64 UDPLink::getBitsSent() const {
     return bitsSentTotal;
 }
 
-qint64 UDPLink::getBitsReceived() {
+qint64 UDPLink::getBitsReceived() const {
     return bitsReceivedTotal;
 }
 
-qint64 UDPLink::getTotalDownstream() {
+qint64 UDPLink::getTotalDownstream() const {
     statisticsMutex.lock();
     qint64 totalDownstream = bitsReceivedTotal / ((MG::TIME::getGroundTimeNow() - connectionStartTime) / 1000);
     statisticsMutex.unlock();
     return totalDownstream;
 }
 
-qint64 UDPLink::getCurrentDownstream() {
+qint64 UDPLink::getCurrentDownstream() const {
     return 0; // TODO
 }
 
-qint64 UDPLink::getMaxDownstream() {
+qint64 UDPLink::getMaxDownstream() const {
     return 0; // TODO
 }
 
-bool UDPLink::isFullDuplex() {
+bool UDPLink::isFullDuplex() const {
     return true;
 }
 
-int UDPLink::getLinkQuality() {
+int UDPLink::getLinkQuality() const {
     /* This feature is not supported with this interface */
     return -1;
 }

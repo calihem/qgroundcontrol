@@ -38,78 +38,131 @@ This file is part of the PIXHAWK project
 #include <QString>
 #include <QTimer>
 #include <QFile>
+#include <QPointer>
 #include <QMap>
 #include <QByteArray>
 #include "ProtocolInterface.h"
 #include "LinkInterface.h"
-#include "protocol.h"
+#include <mavlink.h>
+#include "MG.h"
+
 
 /**
  * MAVLink micro air vehicle protocol reference implementation.
  *
  **/
 class MAVLinkProtocol : public ProtocolInterface {
-    Q_OBJECT
+	Q_OBJECT
 
-public:
-    MAVLinkProtocol();
-    ~MAVLinkProtocol();
+	public:
+		MAVLinkProtocol();
+		~MAVLinkProtocol();
 
-    void run();
-    /** @brief Get the human-friendly name of this protocol */
-    QString getName();
-    /** @brief Get the system id of this application */
-    int getSystemId();
-    /** @brief Get the component id of this application */
-    int getComponentId();
-    /** @brief The auto heartbeat emission rate in Hertz */
-    int getHeartbeatRate();
-    /** @brief Get heartbeat state */
-    bool heartbeatsEnabled(void);
-    /** @brief Get logging state */
-    bool loggingEnabled(void);
-    /** @brief Get the name of the packet log file */
-    static QString getLogfileName();
+		void run();
+		/**
+		 * @brief The auto heartbeat emission rate in Hertz
+		 * @return heartbeat rate in Hertz
+		 */
+		int getHeartbeatRate();
+		/** @brief Get heartbeat state */
+		bool heartbeatsEnabled();
+		/** @brief Get logging state */
+		bool loggingEnabled();
+		/** @brief Get the name of the packet log file */
+		static const QString& getLogfileName();
 
-public slots:
-    /** @brief Receive bytes from a communication interface */
-    void receiveBytes(LinkInterface* link, QByteArray b);
-    /** @brief Send MAVLink message through serial interface */
-    void sendMessage(mavlink_message_t message);
-    /** @brief Send MAVLink message through serial interface */
-    void sendMessage(LinkInterface* link, mavlink_message_t message);
-    /** @brief Set the rate at which heartbeats are emitted */
-    void setHeartbeatRate(int rate);
+	public slots:
+		/**
+		 * @brief Receive bytes from a communication interface
+		 *
+		 * The bytes are copied by calling the LinkInterface::read() method.
+		 *
+		 * @param linkID The interface to read from
+		 * @see LinkInterface
+		 **/
+		virtual void readFromLink(int linkID);
 
-    /** @brief Enable / disable the heartbeat emission */
-    void enableHeartbeats(bool enabled);
+		/**
+		 * @brief Handle bytes from communication interface
+		 *
+		 * This method parses all incoming bytes and constructs a MAVLink packet.
+		 * It can handle multiple links in parallel, as each link has it's own buffer/
+		 * parsing state machine.
+		 *
+		 * @param linkID The ID of the link the byte comes from
+		 * @param data received bytes
+		 */
+		virtual void handleLinkInput(int linkID, const QByteArray& data);
 
-    /** @brief Enable/disable binary packet logging */
-    void enableLogging(bool enabled);
+		/**
+		 * @brief Send MAVLink message through connected links 
+		 * @param message message to send
+		 */
+		void sendMessage(const mavlink_message_t& message);
 
-    /** @brief Send an extra heartbeat to all connected units */
-    void sendHeartbeat();
+		/**
+		 * @brief Set the rate at which heartbeats are emitted
+		 *
+		 * The default rate is 1 Hertz.
+		 * @param rate heartbeat rate in hertz (times per second)
+		 */
+		void setHeartbeatRate(int rate);
 
-protected:
-    QTimer* heartbeatTimer;    ///< Timer to emit heartbeats
-    int heartbeatRate;         ///< Heartbeat rate, controls the timer interval
-    bool m_heartbeatsEnabled;  ///< Enabled/disable heartbeat emission
-    bool m_loggingEnabled;     ///< Enable/disable packet logging
-    QFile* m_logfile;           ///< Logfile
-    QMutex receiveMutex;       ///< Mutex to protect receiveBytes function
-    int lastIndex[256][256];
-    int totalReceiveCounter;
-    int totalLossCounter;
-    int currReceiveCounter;
-    int currLossCounter;
+		/**
+		 * @brief Enable / disable the heartbeat emission
+		 * @param enabled true to enable heartbeats emission at heartbeatRate, false to disable
+		 */
+		void enableHeartbeats(bool enabled);
 
-signals:
-    /** @brief Message received and directly copied via signal */
-    void messageReceived(LinkInterface* link, mavlink_message_t message);
-    /** @brief Emitted if heartbeat emission mode is changed */
-    void heartbeatChanged(bool heartbeats);
-    /** @brief Emitted if logging is started / stopped */
-    void loggingChanged(bool enabled);
+		/** @brief Enable/disable binary packet logging */
+		void enableLogging(bool enabled);
+
+		/**
+		 * @brief Send an extra heartbeat to all connected units
+		 *
+		 * The heartbeat is sent out of order and does not reset the
+		 * periodic heartbeat emission. It will be just sent in addition.
+		 * @return mavlink_message_t heartbeat message sent on serial link
+		 */
+		void sendHeartbeat();
+
+	protected:
+		uint8_t sendBuffer[MAVLINK_MAX_PACKET_LEN];
+		QMutex sendMutex;
+		QTimer heartbeatTimer;     ///< Timer to emit heartbeats
+		int heartbeatRate;         ///< Heartbeat rate, controls the timer interval
+		bool m_heartbeatsEnabled;  ///< Enabled/disable heartbeat emission
+		QPointer<QFile> logFile;   ///< Logfile
+		QMutex receiveMutex;       ///< Mutex to protect receiveBytes function
+		QMutex parsingMutex;       ///< Mutex to protect parsing of data
+		int lastIndex[256][256];
+		int totalReceiveCounter;
+		int totalLossCounter;
+		int currReceiveCounter;
+		int currLossCounter;
+
+	signals:
+		/** @brief Message received and directly forwarded via signal */
+		void messageReceived(const mavlink_message_t& message);
+		/** @brief Emitted if heartbeat emission mode is changed */
+		void heartbeatChanged(bool heartbeats);
+		/** @brief Emitted if logging is started / stopped */
+		void loggingChanged(bool enabled);
 };
+
+inline bool MAVLinkProtocol::heartbeatsEnabled()
+{
+	return m_heartbeatsEnabled;
+}
+
+inline bool MAVLinkProtocol::loggingEnabled()
+{
+	return (logFile != NULL);
+}
+
+inline int MAVLinkProtocol::getHeartbeatRate()
+{
+	return heartbeatRate;
+}
 
 #endif // MAVLINKPROTOCOL_H_

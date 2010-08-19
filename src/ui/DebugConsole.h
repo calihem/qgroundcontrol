@@ -51,13 +51,13 @@ public:
 
 public slots:
     /** @brief Add a link to the list of monitored links */
-    void addLink(LinkInterface* link);
+    void addLink(int linkID);
     /** @brief Update a link name */
-    void updateLinkName(QString name);
+    void updateLinkName(const QString& name);
     /** @brief Select a link for the active view */
     void linkSelected(int linkId);
     /** @brief Receive bytes from link */
-    void receiveBytes(LinkInterface* link, QByteArray bytes);
+    void receiveData(int linkID, const QByteArray& data);
     /** @brief Send lineedit content over link */
     void sendBytes();
     /** @brief Enable HEX display mode */
@@ -80,8 +80,8 @@ public slots:
 protected:
     void changeEvent(QEvent *e);
 
-    QList<LinkInterface*> links;
-    LinkInterface* currLink;
+    QList<int> linkIDs;
+    int currentLinkID;
 
     bool holdOn;              ///< Hold current view, ignore new data
     bool convertToAscii;      ///< Convert data to ASCII

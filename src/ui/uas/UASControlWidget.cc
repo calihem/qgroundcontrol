@@ -100,7 +100,7 @@ void UASControlWidget::setUAS(UASInterface* uas)
         connect(ui.setModeButton, SIGNAL(clicked()), this, SLOT(transmitMode()));
         ui.modeComboBox->insertItem(0, "Select..");
 
-        ui.controlStatusLabel->setText(tr("Connected to ") + uas->getUASName());
+        ui.controlStatusLabel->setText(tr("Connected to ") + uas->getName());
 
         connect(uas, SIGNAL(modeChanged(int,QString,QString)), this, SLOT(updateMode(int,QString,QString)));
         connect(uas, SIGNAL(statusChanged(int)), this, SLOT(updateState(int)));
@@ -188,7 +188,7 @@ void UASControlWidget::transmitMode()
     if (uasMode != 0)
     {
         this->uas->setMode(uasMode);
-        ui.lastActionLabel->setText(QString("Set new mode for system %1").arg(uas->getUASName()));
+        ui.lastActionLabel->setText(QString("Set new mode for system %1").arg(uas->getName()));
     }
 }
 
@@ -202,13 +202,13 @@ void UASControlWidget::cycleContextButton()
         {
             ui.controlButton->setText(tr("Stop Engine"));
             mav->enable_motors();
-            ui.lastActionLabel->setText(QString("Attempted to enable motors on %1").arg(uas->getUASName()));
+            ui.lastActionLabel->setText(QString("Attempted to enable motors on %1").arg(uas->getName()));
         }
         else
         {
             ui.controlButton->setText(tr("Activate Engine"));
             mav->disable_motors();
-            ui.lastActionLabel->setText(QString("Attempted to disable motors on %1").arg(uas->getUASName()));
+            ui.lastActionLabel->setText(QString("Attempted to disable motors on %1").arg(uas->getName()));
         }
             //ui.controlButton->setText(tr("Force Landing"));
             //ui.controlButton->setText(tr("KILL VEHICLE"));

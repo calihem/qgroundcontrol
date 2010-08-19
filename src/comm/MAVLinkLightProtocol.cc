@@ -30,7 +30,6 @@ This file is part of the QGROUNDCONTROL project
 #include "MAVLinkLightProtocol.h"
 #include "UASManager.h"
 #include "ArduPilotMAV.h"
-#include "LinkManager.h"
 
 MAVLinkLightProtocol::MAVLinkLightProtocol() :
     MAVLinkProtocol()
@@ -41,41 +40,19 @@ MAVLinkLightProtocol::MAVLinkLightProtocol() :
 /**
  * @param message message to send
  */
-void MAVLinkLightProtocol::sendMessage(mavlink_light_message_t message)
+void MAVLinkLightProtocol::sendMessage(const mavlink_light_message_t& message)
 {
-    // Get all links connected to this unit
-    QList<LinkInterface*> links = LinkManager::instance()->getLinksForProtocol(this);
+	sendMutex.lock();
 
-    // Emit message on all links that are currently connected
-    QList<LinkInterface*>::iterator i;
-    for (i = links.begin(); i != links.end(); ++i)
-    {
-        sendMessage(*i, message);
-    }
-}
+	// FIXME TO SEND BUFFER FUNCTION MISSING
+	Q_UNUSED(message);
+	int bufferLen = 0;
 
-/**
- * @param link the link to send the message over
- * @param message message to send
- */
-void MAVLinkLightProtocol::sendMessage(LinkInterface* link, mavlink_light_message_t message)
-{
-    // Create buffer
-    uint8_t buffer[100]; // MAXIMUM PACKET LENGTH, INCLUDING STX BYTES
-    // Write message into buffer, prepending start sign
-    //int len = mavlink_msg_to_send_buffer(buffer, &message);
-
-
-    // FIXME TO SEND BUFFER FUNCTION MISSING
-    Q_UNUSED(message);
-    int len = 0;
-
-    // If link is connected
-    if (link->isConnected())
-    {
-        // Send the portion of the buffer now occupied by the message
-        link->writeBytes((const char*)buffer, len);
-    }
+	// Construct new QByteArray of size bufferLen without copying buffer
+	QByteArray data = QByteArray::fromRawData((char*)sendBuffer, bufferLen);
+	emit dataToSend(data);
+	
+	sendMutex.unlock();
 }
 
 /**
@@ -86,10 +63,10 @@ void MAVLinkLightProtocol::sendMessage(LinkInterface* link, mavlink_light_messag
  * @param link The interface to read from
  * @see LinkInterface
  **/
-void MAVLinkLightProtocol::receiveBytes(LinkInterface* link, QByteArray b)
+void MAVLinkLightProtocol::handleLinkInput(int linkID, const QByteArray& data)
 {
-    Q_UNUSED(link);
-    Q_UNUSED(b);
+    Q_UNUSED(linkID);
+    Q_UNUSED(data);
 //    receiveMutex.lock();
 //    // Prepare buffer
 //    static const int maxlen = 4096 * 100;

@@ -58,9 +58,8 @@ signals:
     void messageReceived(LinkInterface* link, mavlink_light_message_t message);
 
 public slots:
-    void sendMessage(mavlink_light_message_t message);
-    void sendMessage(LinkInterface* link, mavlink_light_message_t message);
-    void receiveBytes(LinkInterface* link, QByteArray b);
+	void sendMessage(const mavlink_light_message_t& message);
+	virtual void handleLinkInput(int linkID, const QByteArray& data);
 
 };
 

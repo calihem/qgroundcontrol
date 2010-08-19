@@ -432,7 +432,7 @@ void HSIDisplay::setActiveUAS(UASInterface* uas)
 
     //if (this->uas != uas)
     // {
-    //qDebug() << "UAS SET!" << "ID:" << uas->getUASID();
+    //qDebug() << "UAS SET!" << "ID:" << uas->getID();
     // Setup communication
     //connect(uas, SIGNAL(valueChanged(UASInterface*,QString,double,quint64)), this, SLOT(updateValue(UASInterface*,QString,double,quint64)));
     //}

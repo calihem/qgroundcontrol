@@ -38,47 +38,37 @@ This file is part of the PIXHAWK project
 #include <QDebug>
 #include <MG.h>
 
-/**
- * Create a simulated link. This link is connected to an input and output file.
- * The link sends one line at a time at the specified sendrate. The timing of
- * the sendrate is free of drift, which means it is stable on the long run.
- * However, small deviations are mixed in which vary the sendrate slightly
- * in order to simulate disturbances on a real communication link.
- *
- * @param readFile The file with the messages to read (must be in ASCII format, line breaks can be Unix or Windows style)
- * @param writeFile The received messages are written to that file
- * @param sendrate The rate at which the messages are sent (in intervals of milliseconds)
- **/
-SerialSimulationLink::SerialSimulationLink(QFile* readFile, QFile* writeFile, int sendrate)
+SerialSimulationLink::SerialSimulationLink(QFile* readFile, QFile* writeFile, int sendrate) :
+	portName( tr("Simulated Port") ),
+	loopBack(NULL), // If a non-empty portname is supplied, the serial simulation link should attempt loopback simulation
+	simulationFile(readFile),
+	receiveFile(writeFile),
+	fileStream(NULL),
+	outStream(NULL),
+	_isConnected(false),
+	rate(sendrate),
+	maxTimeNoise(0),
+	lastSent( MG::TIME::getGroundTimeNow() )
 {
-    // If a non-empty portname is supplied, the serial simulation link should attempt loopback simulation
-    loopBack = NULL;
-
-    /* Comments on the variables can be found in the header file */
-
-    lineBuffer = QByteArray();
-    lineBuffer.clear();
-    readyBuffer = QByteArray();
-    readyBuffer.clear();
-    simulationFile = readFile;
-    receiveFile = writeFile;
-    lastSent = MG::TIME::getGroundTimeNow();
-
     /* Initialize the pseudo-random number generator */
     srand(QTime::currentTime().msec());
-    maxTimeNoise = 0;
 
-    timer = new QTimer(this);
-    QObject::connect(timer, SIGNAL(timeout()), this, SLOT(readLine()));
-    _isConnected = false;
-    rate = sendrate;
+    connect(&timer, SIGNAL(timeout()), this, SLOT(readLine()));
 }
 
 SerialSimulationLink::~SerialSimulationLink()
 {
     //TODO Check destructor
-    fileStream->flush();
-    outStream->flush();
+	if(fileStream)
+	{
+		fileStream->flush();
+		delete fileStream;
+	}
+	if(outStream)
+	{
+		outStream->flush();
+		delete outStream;
+	}
 }
 
 void SerialSimulationLink::run()
@@ -100,7 +90,7 @@ void SerialSimulationLink::enableLoopBackMode(SerialLink* loop)
     // Lock the data
     readyBufferMutex.lock();
     // Disconnect this link
-    disconnect();
+    close();
 
     // Delete previous loopback link if exists
     if(loopBack != NULL)
@@ -112,17 +102,15 @@ void SerialSimulationLink::enableLoopBackMode(SerialLink* loop)
     // Set new loopback link
     loopBack = loop;
     // Connect signals
-    QObject::connect(loopBack, SIGNAL(connected()), this, SIGNAL(connected()));
-    QObject::connect(loopBack, SIGNAL(disconnected()), this, SIGNAL(disconnected()));
-    QObject::connect(loopBack, SIGNAL(connected(bool)), this, SIGNAL(connected(bool)));
-    QObject::connect(loopBack, SIGNAL(bytesReady(LinkInterface*)), this, SIGNAL(bytesReady(LinkInterface*)));
+    connect(loopBack, SIGNAL(connected()), this, SIGNAL(connected()));
+    connect(loopBack, SIGNAL(disconnected()), this, SIGNAL(disconnected()));
+    connect(loopBack, SIGNAL(connected(bool)), this, SIGNAL(connected(bool)));
+    connect(loopBack, SIGNAL(bytesReady(LinkInterface*)), this, SIGNAL(bytesReady(LinkInterface*)));
     readyBufferMutex.unlock();
 
 }
 
-
-qint64 SerialSimulationLink::bytesAvailable()
-{
+qint64 SerialSimulationLink::bytesAvailable() const {
     readyBufferMutex.lock();
     qint64 size = 0;
     if(loopBack == 0)
@@ -138,36 +126,37 @@ qint64 SerialSimulationLink::bytesAvailable()
     return size;
 }
 
-void SerialSimulationLink::writeBytes(char* data, qint64 length)
-{
+qint64 SerialSimulationLink::write(char* data, qint64 length) {
     /* Write bytes to one line */
     for(qint64 i = 0; i < length; i++)
     {
         outStream->operator <<(data[i]);
         outStream->flush();
     }
-
+    return length;
 }
 
+qint64 SerialSimulationLink::read(char* const data, qint64 maxLength) {
+	qint64 receivedBytes = 0;
 
-void SerialSimulationLink::readBytes()
-{
-    const qint64 maxLength = 2048;
-    char data[maxLength];
-    /* Lock concurrent resource readyBuffer */
-    readyBufferMutex.lock();
-    if(loopBack == NULL)
-    {
-        // FIXME Maxlength has no meaning here
-        /* copy leftmost maxLength bytes and remove them from buffer */
-        qstrncpy(data, readyBuffer.left(maxLength).data(), maxLength);
-        readyBuffer.remove(0, maxLength);
-    }
-    else
-    {
-        //loopBack->readBytes(data, maxLength);
-    }
-    readyBufferMutex.unlock();
+	/* Lock concurrent resource readyBuffer */
+	readyBufferMutex.lock();
+
+	if(loopBack == NULL)
+	{
+		receivedBytes = readyBuffer.size();
+		/* copy leftmost maxLength bytes and remove them from buffer */
+		qstrncpy(data, readyBuffer.left(maxLength).data(), maxLength);
+		receivedBytes = receivedBytes - readyBuffer.remove(0, maxLength).size();
+	}
+	else
+	{
+		//receivedBytes = loopBack->read(data, maxLength);
+	}
+
+	readyBufferMutex.unlock();
+	
+	return receivedBytes;
 }
 
 /**
@@ -203,14 +192,20 @@ void SerialSimulationLink::readLine()
         }
         else
         {
-            loopBack->writeBytes(lineBuffer.data(), lineBuffer.size());
+            loopBack->write(lineBuffer.data(), lineBuffer.size());
         }
         readyBufferMutex.unlock();
 
-        if(loopBack == NULL)
-        {
-            readBytes();
-        }
+	if (loopBack == NULL)
+	{
+		if (readingMode == AutoReading)
+		{
+			// FIXME maxlength has no meaning here
+			const qint64 maxLength = 2048;
+			char buffer[maxLength];
+			read(buffer, maxLength);
+		}
+	}
 
         /* (4) Read one line and save it in line buffer */
         lineBuffer.clear();
@@ -262,7 +257,7 @@ void SerialSimulationLink::addTimeNoise()
     /* Calculate the time deviation */
     if(maxTimeNoise == 0) {
         /* Don't do expensive calculations if no noise is desired */
-        timer->setInterval(rate);
+        timer.setInterval(rate);
     } else {
         /* Calculate random time noise (gauss distribution):
                  *
@@ -275,7 +270,7 @@ void SerialSimulationLink::addTimeNoise()
                  * (3) Complete term: Number between -maxTimeNoise and +maxTimeNoise
                  */
         double timeDeviation = (((2 * rand()) / RAND_MAX) - 1) * maxTimeNoise;
-        timer->setInterval(static_cast<int>(rate + floor(timeDeviation)));
+        timer.setInterval(static_cast<int>(rate + floor(timeDeviation)));
     }
 
 }
@@ -286,10 +281,10 @@ void SerialSimulationLink::addTimeNoise()
  * @return True if connection has been disconnected, false if connection
  * couldn't be disconnected.
  **/
-bool SerialSimulationLink::disconnect() {
+bool SerialSimulationLink::close() {
 
     if(isConnected()) {
-        timer->stop();
+        timer.stop();
 
         fileStream->flush();
         outStream->flush();
@@ -300,9 +295,9 @@ bool SerialSimulationLink::disconnect() {
         _isConnected = false;
 
         if(loopBack == NULL) {
-            emit disconnected();
+            emit closed();
         } else {
-            loopBack->disconnect();
+            loopBack->close();
         }
 
         exit();
@@ -317,8 +312,7 @@ bool SerialSimulationLink::disconnect() {
  * @return True if connection has been established, false if connection
  * couldn't be established.
  **/
-bool SerialSimulationLink::connect()
-{
+bool SerialSimulationLink::open() {
     /* Open files */
     //@TODO Add check if file can be read
     simulationFile->open(QIODevice::ReadOnly);
@@ -337,13 +331,13 @@ bool SerialSimulationLink::connect()
     _isConnected = true;
 
     if(loopBack == NULL) {
-        emit connected();
+        emit opened();
     } else {
-        loopBack->connect();
+        loopBack->open();
     }
 
     start(LowPriority);
-    timer->start(rate);
+    timer.start(rate);
     return true;
 }
 
@@ -352,154 +346,77 @@ bool SerialSimulationLink::connect()
  *
  * @return True if link is connected, false otherwise.
  **/
-bool SerialSimulationLink::isConnected()
+bool SerialSimulationLink::isConnected() const
 {
     return _isConnected;
 }
 
-qint64 SerialSimulationLink::getNominalDataRate()
+qint64 SerialSimulationLink::getNominalDataRate() const
 {
     /* 100 Mbit is reasonable fast and sufficient for all embedded applications */
     return 100000000;
 }
 
-qint64 SerialSimulationLink::getTotalUpstream()
+qint64 SerialSimulationLink::getTotalUpstream() const
 {
     return 0;
     //TODO Add functionality here
     // @todo Add functionality here
 }
 
-qint64 SerialSimulationLink::getShortTermUpstream()
+qint64 SerialSimulationLink::getShortTermUpstream() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getCurrentUpstream()
+qint64 SerialSimulationLink::getCurrentUpstream() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getMaxUpstream()
+qint64 SerialSimulationLink::getMaxUpstream() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getBitsSent()
+qint64 SerialSimulationLink::getBitsSent() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getBitsReceived()
+qint64 SerialSimulationLink::getBitsReceived() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getTotalDownstream()
+qint64 SerialSimulationLink::getTotalDownstream() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getShortTermDownstream()
+qint64 SerialSimulationLink::getShortTermDownstream() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getCurrentDownstream()
+qint64 SerialSimulationLink::getCurrentDownstream() const
 {
     return 0;
 }
 
-qint64 SerialSimulationLink::getMaxDownstream()
+qint64 SerialSimulationLink::getMaxDownstream() const
 {
     return 0;
 }
 
-bool SerialSimulationLink::isFullDuplex()
+bool SerialSimulationLink::isFullDuplex() const
 {
     /* Full duplex is no problem when running in pure software, but this is a serial simulation */
     return false;
 }
 
-int SerialSimulationLink::getLinkQuality()
+int SerialSimulationLink::getLinkQuality() const
 {
     /* The Link quality is always perfect when running in software */
     return 100;
-}
-
-bool SerialSimulationLink::setPortName(QString portName)
-{
-    Q_UNUSED(portName);
-    return true;
-}
-
-bool SerialSimulationLink::setBaudRate(int rate)
-{
-    Q_UNUSED(rate);
-    return true;
-}
-
-bool SerialSimulationLink::setFlowType(int type)
-{
-    Q_UNUSED(type);
-    return true;
-}
-
-bool SerialSimulationLink::setParityType(int type)
-{
-    Q_UNUSED(type);
-    return true;
-}
-
-bool SerialSimulationLink::setDataBitsType(int type)
-{
-    Q_UNUSED(type);
-    return true;
-}
-
-bool SerialSimulationLink::setStopBitsType(int type)
-{
-    Q_UNUSED(type)
-    return true;
-}
-
-QString SerialSimulationLink::getPortName()
-{
-    return tr("simulated/port");
-}
-
-int SerialSimulationLink::getBaudRate()
-{
-    return 115200;
-}
-
-int SerialSimulationLink::getBaudRateType()
-{
-    return 19;
-}
-
-int SerialSimulationLink::getFlowType()
-{
-    return 0;
-}
-
-int SerialSimulationLink::getParityType()
-{
-    return 0;
-}
-
-int SerialSimulationLink::getDataBitsType()
-{
-    return 8;
-}
-
-int SerialSimulationLink::getStopBitsType()
-{
-    return 2;
-}
-
-bool SerialSimulationLink::setBaudRateType(int rateIndex)
-{
-    Q_UNUSED(rateIndex);
-    return true;
 }

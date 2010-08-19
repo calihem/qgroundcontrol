@@ -27,6 +27,7 @@ This file is part of the PIXHAWK project
  *   @brief Definition of configuration window for serial links
  *
  *   @author Lorenz Meier <mavteam@student.ethz.ch>
+ *   @author Michael Schulz <coding@calihem.de>
  *
  */
 
@@ -45,43 +46,45 @@ This file is part of the PIXHAWK project
 
 class SerialConfigurationWindow : public QWidget
 {
-    Q_OBJECT
+	Q_OBJECT
 
-public:
-    SerialConfigurationWindow(LinkInterface* link, QWidget *parent = 0, Qt::WindowFlags flags = Qt::Sheet);
-    ~SerialConfigurationWindow();
+	public:
+		SerialConfigurationWindow(SerialLinkInterface* link, QWidget *parent = 0, Qt::WindowFlags flags = Qt::Sheet);
+		~SerialConfigurationWindow();
 
-    QAction* getAction();
+	public slots:
+		void refreshPortNameComboBox();
+		/// Set the window title to given @param portname
+		void setTitleToPortName(const QString& portname);
+		/// Enable flow control of serial link
+		void enableFlowControl(bool flow);
 
-public slots:
-    void configureCommunication();
-    void enableFlowControl(bool flow);
-    void setParityNone();
-    void setParityOdd();
-    void setParityEven();
-    void setPortName(QString port);
-    void setLinkName(QString name);
-    /**
-         * @brief Remove this link
-         *
-         * Disconnects the associated link, removes it from all menus and closes the window.
-         */
-    void remove();
-    void setupPortList();
+	private slots:
+		void setPortName(const QString& portname);
+		void setBaudRate(int index);
+		void setParityNone();
+		void setParityOdd();
+		void setParityEven();
+		void setDataBits(int bits);
+		void setStopBits(int bits);
+		void showEvent(QShowEvent* event);
+		void hideEvent(QHideEvent* event);
 
-protected slots:
-    void showEvent(QShowEvent* event);
-    void hideEvent(QHideEvent* event);
+	protected:
 
-protected:
-    bool userConfigured; ///< Switch to detect if current values are user-selected and shouldn't be overriden
+	private:
+		Ui::serialSettings ui;
+		SerialLinkInterface* serialLink;
+		QTimer portCheckTimer;
 
-private:
-
-    Ui::serialSettings ui;
-    SerialLinkInterface* link;
-    QAction* action;
-    QTimer* portCheckTimer;
+		/// fills the port name combobox with ports found on system
+		void fillPortNameComboBox();
+		/// fills the baud rate combobox with baud rates supported by system
+		void fillBaudRateComboBox();
+		/// Setup the user interface according to link type
+		void loadSettingsFromPort();
+		void loadPortNameFromPort();
+		void setupSignals();
 
 };
 

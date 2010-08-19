@@ -35,9 +35,9 @@ This file is part of the PIXHAWK project
 #include <QStatusBar>
 #include <QStackedWidget>
 #include <QSettings>
+#include <QPointer>
 
 #include "ui_MainWindow.h"
-#include "LinkManager.h"
 #include "LinkInterface.h"
 #include "UASInterface.h"
 #include "UASManager.h"
@@ -75,6 +75,13 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
+    /**
+     * Create new mainwindow. The constructor instantiates all parts of the user
+     * interface. It does NOT show the mainwindow. To display it, call the show()
+     * method.
+     *
+     * @see QMainWindow::show()
+     **/
     MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
@@ -97,8 +104,8 @@ public slots:
      * @param status message text
      */
     void showStatusMessage(const QString& status);
-    void addLink();
-    void addLink(LinkInterface* link);
+    void invokeCommConfigDialog();
+    void addLinkAction(int linkID);
     void configure();
     void UASCreated(UASInterface* uas);
     void startVideoCapture();
@@ -131,45 +138,53 @@ public slots:
     void loadSlugsView();
     void loadPixhawkView();
 
-    /** @brief Reload the CSS style sheet */
+    /** @brief Reload the CSS style sheet
+     *
+     * Reload the style sheet from disk. The function tries to load "qgroundcontrol.css" from the application
+     * directory (which by default does not exist). If it fails, it will load the bundled default CSS
+     * from memory.
+     * To customize the application, just create a qgroundcontrol.css file in the application directory
+     */
     void reloadStylesheet();
 protected:
     QStatusBar* statusBar;
     QStatusBar* createStatusBar();
     void loadWidgets();
     void connectActions();
+    /**
+     * @brief Clears the current view completely
+     *
+     * Hide center and dock widgets.
+     */
     void clearView();
+    /**
+     * @brief Build the center and dock widgets of main window
+     */
     void buildWidgets();
     void connectWidgets();
     void arrangeCenterStack();
     void configureWindowName();
 
-    // TODO Should be moved elsewhere, as the protocol does not belong to the UI
-    MAVLinkProtocol* mavlink;
-    AS4Protocol* as4link;
-
-    MAVLinkSimulationLink* simulationLink;
-    LinkInterface* udpLink;
-
     QSettings settings;
-    UASControlWidget* control;
-    Linecharts* linechart;
-    UASInfoWidget* info;
-    CameraView* camera;
-    UASListWidget* list;
-    WaypointList* waypoints;
-    ObjectDetectionView* detection;
-    HUD* hud;
-    DebugConsole* debugConsole;
-    MapWidget* map;
-    ParameterInterface* parameters;
-    XMLCommProtocolWidget* protocol;
-    HDDisplay* headDown1;
-    HDDisplay* headDown2;
-    WatchdogControl* watchdogControl;
-    HSIDisplay* hsi;
-    QGCDataPlot2D* dataplot;
-
+    // Center widgets
+    QStackedWidget *centerStack;
+    QPointer<Linecharts> linechartWidget;
+    QPointer<XMLCommProtocolWidget> protocolWidget;
+    QPointer<MapWidget> mapWidget;
+    QPointer<HUD> hudWidget;
+    QPointer<QGCDataPlot2D> dataplotWidget;
+    // Dock widgets
+    QPointer<QDockWidget> controlDockWidget;
+    QPointer<QDockWidget> infoDockWidget;
+    QPointer<QDockWidget> listDockWidget;
+    QPointer<QDockWidget> waypointDockWidget;
+    QPointer<QDockWidget> detectionDockWidget;
+    QPointer<QDockWidget> debugConsoleDockWidget;
+    QPointer<QDockWidget> parameterDockWidget;
+    QPointer<QDockWidget> hddDockWidget1;
+    QPointer<QDockWidget> hddDockWidget2;
+    QPointer<QDockWidget> watchdogControlDockWidget;
+    QPointer<QDockWidget> hsiDockWidget;
     // Popup widgets
     JoystickWidget* joystickWidget;
 
@@ -184,8 +199,7 @@ protected:
     QAction* killUASAct;
     QAction* simulateUASAct;
 
-    QDockWidget* controlDock;
-    QStackedWidget* centerStack;
+//     QDockWidget* controlDock;
 
     LogCompressor* comp;
     QString screenFileName;

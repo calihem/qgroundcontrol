@@ -46,11 +46,14 @@ This file is part of the PIXHAWK project
 #include "MainWindow.h"
 #include "GAudioOutput.h"
 
+#include "ProtocolStack.h"
+#include "UDPLink.h"
+#include "MAVLinkSimulationLink.h"
 #ifdef OPAL_RT
 #include "OpalLink.h"
 #endif
-#include "UDPLink.h"
-#include "MAVLinkSimulationLink.h"
+
+#include "UASManager.h"
 
 
 /**
@@ -65,56 +68,41 @@ This file is part of the PIXHAWK project
 
 Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
 {
-    this->setApplicationName(QGC_APPLICATION_NAME);
-    this->setApplicationVersion(QGC_APPLICATION_VERSION);
-    this->setOrganizationName(QLatin1String("PIXHAWK Association Zurich"));
-    this->setOrganizationDomain("http://qgroundcontrol.org");
+    setApplicationName(QGC_APPLICATION_NAME);
+    setApplicationVersion(QGC_APPLICATION_VERSION);
+    setOrganizationName(QLatin1String("PIXHAWK Association Zurich"));
+    setOrganizationDomain("http://qgroundcontrol.org");
 
     // Show splash screen
     QPixmap splashImage(":images/splash.png");
-    QSplashScreen* splashScreen = new QSplashScreen(splashImage, Qt::WindowStaysOnTopHint);
-    splashScreen->show();
-    splashScreen->showMessage(tr("Loading application fonts"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+    QSplashScreen splashScreen(splashImage, Qt::WindowStaysOnTopHint);
+    splashScreen.show();
+    splashScreen.showMessage(tr("Loading application fonts"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
 
     QSettings::setDefaultFormat(QSettings::IniFormat);
     // Exit main application when last window is closed
     connect(this, SIGNAL(lastWindowClosed()), this, SLOT(quit()));
 
-    // Set application font
+    // Load application font
     QFontDatabase fontDatabase = QFontDatabase();
     const QString fontFileName = ":/general/vera.ttf"; ///< Font file is part of the QRC file and compiled into the app
     const QString fontFamilyName = "Bitstream Vera Sans";
-    if(!QFile::exists(fontFileName)) printf("ERROR! font file: %s DOES NOT EXIST!\n", fontFileName.toStdString().c_str());
+    if( !QFile::exists(fontFileName) )
+        qDebug() << "ERROR! font file: " << fontFileName << " DOES NOT EXIST!";
     fontDatabase.addApplicationFont(fontFileName);
-    setFont(fontDatabase.font(fontFamilyName, "Roman", 12));
+    // Avoid Using setFont(). In the Qt docu you can read the following:
+    //     "Warning: Do not use this function in conjunction with Qt Style Sheets."
+    // setFont(fontDatabase.font(fontFamilyName, "Roman", 12));
 
     // Start the comm link manager
-    splashScreen->showMessage(tr("Starting Communication Links"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
-    startLinkManager();
+    splashScreen.showMessage(tr("Starting Communication Links"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
 
-    // Start the UAS Manager
-    splashScreen->showMessage(tr("Starting UAS Manager"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
-    startUASManager();
-
-    //tarsus = new ViconTarsusProtocol();
-    //tarsus->start();
-
-    // Start the user interface
-    splashScreen->showMessage(tr("Starting User Interface"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
-    // Start UI
-    mainWindow = new MainWindow();
-
-    // Remove splash screen
-    splashScreen->finish(mainWindow);
-
-    // Connect links
-    // to make sure that all components are initialized when the
-    // first messages arrive
+    // Build udp link
     UDPLink* udpLink = new UDPLink(QHostAddress::Any, 14550);
-    mainWindow->addLink(udpLink);
-
-    // Check if link could be connected
-    if (!udpLink->connect())
+    ProtocolStack::instance().addLink(udpLink);
+    ProtocolStack::instance().registerProtocol(udpLink->getID(), ProtocolStack::MAVLinkProtocol);
+    // Connect udp link to ensure that all components are initialized when the first messages arrive
+    if (!udpLink->open())
     {
         QMessageBox msgBox;
         msgBox.setIcon(QMessageBox::Critical);
@@ -134,6 +122,11 @@ Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
             QTimer::singleShot(200, mainWindow, SLOT(close()));
         }
     }
+    
+    // Build simulation link
+    MAVLinkSimulationLink* simulationLink = new MAVLinkSimulationLink(":/demo-log.txt");
+    ProtocolStack::instance().addLink(simulationLink);
+    ProtocolStack::instance().registerProtocol(simulationLink->getID(), ProtocolStack::MAVLinkProtocol);
 
 #ifdef OPAL_RT
     // Add OpalRT Link, but do not connect
@@ -142,37 +135,29 @@ Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
     opalLink->connect();
 #warning OPAL LINK NOW AUTO CONNECTING IN CORE.CC
 #endif
-    // MAVLinkSimulationLink* simulationLink = new MAVLinkSimulationLink(MG::DIR::getSupportFilesDirectory() + "/demo-log.txt");
-    MAVLinkSimulationLink* simulationLink = new MAVLinkSimulationLink(":/demo-log.txt");
-    mainWindow->addLink(simulationLink);
+
+    // Start the UAS Manager
+    splashScreen.showMessage(tr("Starting UAS Manager"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+    startUASManager();
+
+    //tarsus = new ViconTarsusProtocol();
+    //tarsus->start();
+
+    // Start the user interface
+    splashScreen.showMessage(tr("Starting User Interface"), Qt::AlignLeft | Qt::AlignBottom, QColor(62, 93, 141));
+    // Start UI
+    mainWindow = new MainWindow();
+
+    // Remove splash screen
+    splashScreen.finish(mainWindow);
 }
 
-/**
- * @brief Destructor for the groundstation. It destroys all loaded instances.
- *
- **/
 Core::~Core()
 {
     // Delete singletons
-    delete LinkManager::instance();
     delete UASManager::instance();
 }
 
-/**
- * @brief Start the link managing component.
- *
- * The link manager keeps track of all communication links and provides the global
- * packet queue. It is the main communication hub
- **/
-void Core::startLinkManager()
-{
-    LinkManager::instance();
-}
-
-/**
- * @brief Start the Unmanned Air System Manager
- *
- **/
 void Core::startUASManager()
 {
     // Load UAS plugins

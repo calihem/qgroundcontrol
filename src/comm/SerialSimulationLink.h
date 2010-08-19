@@ -51,59 +51,71 @@ class SerialSimulationLink : public SerialLinkInterface {
 	Q_OBJECT
 
 public:
+	/**
+	 * Create a simulated link. This link is connected to an input and output file.
+	 * The link sends one line at a time at the specified sendrate. The timing of
+	 * the sendrate is free of drift, which means it is stable on the long run.
+	 * However, small deviations are mixed in which vary the sendrate slightly
+	 * in order to simulate disturbances on a real communication link.
+	 *
+	 * @param readFile The file with the messages to read (must be in ASCII format, line breaks can be Unix or Windows style)
+	 * @param writeFile The received messages are written to that file
+	 * @param sendrate The rate at which the messages are sent (in intervals of milliseconds)
+	 **/
         SerialSimulationLink(QFile* inputFile=NULL, QFile* outputFile=NULL, int sendrate=20);
 	~SerialSimulationLink();
 
-	bool isConnected();
-	qint64 bytesAvailable();
+	bool isConnected() const;
+	qint64 bytesAvailable() const;
 
 	void run();
 
 	/* Extensive statistics for scientific purposes */
-	qint64 getNominalDataRate();
-	qint64 getTotalUpstream();
-	qint64 getShortTermUpstream();
-	qint64 getCurrentUpstream();
-	qint64 getMaxUpstream();
-	qint64 getTotalDownstream();
-	qint64 getShortTermDownstream();
-	qint64 getCurrentDownstream();
-	qint64 getMaxDownstream();
-	qint64 getBitsSent();
-	qint64 getBitsReceived();
+	qint64 getNominalDataRate() const;
+	qint64 getTotalUpstream() const;
+	qint64 getShortTermUpstream() const;
+	qint64 getCurrentUpstream() const;
+	qint64 getMaxUpstream() const;
+	qint64 getTotalDownstream() const;
+	qint64 getShortTermDownstream() const;
+	qint64 getCurrentDownstream() const;
+	qint64 getMaxDownstream() const;
+	qint64 getBitsSent() const;
+	qint64 getBitsReceived() const;
 
 	void enableLoopBackMode(SerialLink* loop);
-	QString getPortName();
-	int getBaudRate();
-	int getBaudRateType();
-	int getFlowType();
-	int getParityType();
-	int getDataBitsType();
-	int getStopBitsType();
+	
+		virtual const QString& getPortName() const;
+		virtual BaudRateType getBaudRate() const;
+		virtual FlowType getFlowControl() const;
+		virtual ParityType getParity() const;
+		virtual DataBitsType getDataBits() const;
+		virtual StopBitsType getStopBits() const;
 
-	int getLinkQuality();
-	bool isFullDuplex();
 
-public slots:
-	bool setPortName(QString portName);
-	bool setBaudRateType(int rateIndex);
-	bool setBaudRate(int rate);
-	bool setFlowType(int flow);
-	bool setParityType(int parity);
-	bool setDataBitsType(int dataBits);
-	bool setStopBitsType(int stopBits);
+	int getLinkQuality() const;
+	bool isFullDuplex() const;
+
+	public slots:
+		virtual void setPortName(const QString& portName);
+		virtual void setBaudRate(BaudRateType baudrateType);
+		virtual void setFlowControl(FlowType flowType);
+		virtual void setParity(ParityType parityType);
+		virtual void setDataBits(DataBitsType dataBitsType);
+		virtual void setStopBits(StopBitsType stopBitsType);
 
 	void readLine();
-        void writeBytes(char *bytes, qint64 length);
-        void readBytes();
+	qint64 write(char *bytes, qint64 length);
+	qint64 read(char *bytes, qint64 maxLength);
 
-	bool connect();
-	bool disconnect();
+	bool open();
+	bool close();
 
 	void setMaximumTimeNoise(int milliseconds);
 
 protected:
-	QTimer* timer;
+	QString portName;
+	QTimer timer;
 	SerialLink* loopBack;
 	/** File which contains the input data (simulated robot messages) **/
 	QFile* simulationFile;
@@ -116,7 +128,7 @@ protected:
 	QByteArray lineBuffer;
 	/** Buffer which can be read from connected protocols through readBytes(). **/
 	QByteArray readyBuffer;
-	QMutex readyBufferMutex;
+	mutable QMutex readyBufferMutex;
 	bool _isConnected;
 	quint64 rate;
 	int maxTimeNoise;
@@ -130,5 +142,64 @@ signals:
 	//void bytesReady(LinkInterface *link);
 
 };
+
+inline const QString& SerialSimulationLink::getPortName() const {
+	return portName;
+}
+
+inline BaudRateType SerialSimulationLink::getBaudRate() const
+{
+	return BAUD115200;
+}
+
+inline FlowType SerialSimulationLink::getFlowControl() const
+{
+	return FLOW_OFF;
+}
+
+inline ParityType SerialSimulationLink::getParity() const
+{
+	return PAR_NONE;
+}
+
+inline DataBitsType SerialSimulationLink::getDataBits() const
+{
+	return DATA_8;
+}
+
+inline StopBitsType SerialSimulationLink::getStopBits() const
+{
+	return STOP_1;
+}
+
+inline void SerialSimulationLink::setPortName(const QString& portName)
+{
+	SerialSimulationLink::portName = portName;
+}
+
+inline void SerialSimulationLink::setBaudRate(BaudRateType baudrateType)
+{
+	Q_UNUSED(baudrateType);
+}
+
+inline void SerialSimulationLink::setFlowControl(FlowType flowType)
+{
+	Q_UNUSED(flowType);
+}
+
+inline void SerialSimulationLink::setParity(ParityType parityType)
+{
+	Q_UNUSED(parityType);
+}
+
+inline void SerialSimulationLink::setDataBits(DataBitsType dataBitsType)
+{
+	Q_UNUSED(dataBitsType);
+}
+
+inline void SerialSimulationLink::setStopBits(StopBitsType stopBitsType)
+{
+	Q_UNUSED(stopBitsType);
+}
 
 #endif // _SERIALSIMULATIONLINK_H_
