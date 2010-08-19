@@ -82,13 +82,6 @@ DebugConsole::DebugConsole(QWidget *parent) :
     m_ui->mavlinkCheckBox->setChecked(filterMAVLINK);
     m_ui->holdCheckBox->setChecked(autoHold);
 
-    // Get a list of all existing link IDs
-    QList<int> linkIDs( ProtocolStack::instance().getLinkIDs() );
-    foreach (int linkID, linkIDs)
-    {
-        addLink(linkID);
-    }
-
     // Connect to link manager to get notified about new links
     connect(&ProtocolStack::instance(), SIGNAL(linkAdded(int)), this, SLOT(addLink(int)));
     //TODO Get notified about removed links 
@@ -102,6 +95,13 @@ DebugConsole::DebugConsole(QWidget *parent) :
     connect(m_ui->holdCheckBox, SIGNAL(clicked(bool)), this, SLOT(setAutoHold(bool)));
     // Connect hold button
     connect(m_ui->holdButton, SIGNAL(toggled(bool)), this, SLOT(hold(bool)));
+
+    // Get a list of all existing link IDs
+    QList<int> linkIDs( ProtocolStack::instance().getLinkIDs() );
+    foreach (int linkID, linkIDs)
+    {
+        addLink(linkID);
+    }
 
     this->setVisible(false);
 }

@@ -37,6 +37,7 @@ This file is part of the PIXHAWK project
 #include "MG.h"
 
 UDPLink::UDPLink(QHostAddress host, quint16 port) :
+	LinkInterface(-1, ManualReading),
 	host(host),
 	port(port),
 	socket(NULL),
@@ -57,6 +58,16 @@ UDPLink::~UDPLink()
  **/
 void UDPLink::run()
 {
+// 	loopForever = true;
+	loopForever = false;
+	while(loopForever)
+	{
+		// TODO: Block until new data is available
+		if (readingMode == AutoReading)
+		{
+			//TODO: read and emit
+		}
+	}
 }
 
 void UDPLink::setAddress(const QString& address)
@@ -173,7 +184,6 @@ qint64 UDPLink::bytesAvailable() const {
  **/
 void UDPLink::emitBytesReady()
 {
-//     emit bytesReady(this);
 	emit readyRead(id);
 }
 
@@ -184,7 +194,9 @@ void UDPLink::emitBytesReady()
  **/
 bool UDPLink::close()
 {
-    //FIXME: only emit closed, if state is QAbstractSocket::ConnectedState || QAbstractSocket::BoundState
+	//FIXME: stop thread first
+	
+	//FIXME: only emit closed, if state is QAbstractSocket::ConnectedState || QAbstractSocket::BoundState
     delete socket;
     socket = NULL;
 
@@ -202,22 +214,29 @@ bool UDPLink::close()
  **/
 bool UDPLink::open()
 {
-    socket = new QUdpSocket(this);
+	socket = new QUdpSocket(this);
+	if (!socket) return false;
 
     //QObject::connect(socket, SIGNAL(readyRead()), this, SLOT(readPendingDatagrams()));
-    QObject::connect(socket, SIGNAL(readyRead()), this, SLOT(emitBytesReady()));
+	connectState = socket->bind(host, port);
 
-    connectState = socket->bind(host, port);
+	if (connectState)
+	{
+		emit opened(connectState);
+		emit opened();
+		connectionStartTime = MG::TIME::getGroundTimeNow();
 
-    emit opened(connectState);
-    if (connectState)
-    {
-        emit opened();
-        connectionStartTime = MG::TIME::getGroundTimeNow();
-    }
+		if (readingMode == AutoReading)
+		{
+			start(HighPriority);
+		}
+		else if (readingMode == ManualReading)
+		{
+			connect(socket, SIGNAL(readyRead()), this, SLOT(emitBytesReady()));
+		}
+	}
 
-    start(HighPriority);
-    return connectState;
+	return connectState;
 }
 
 /**

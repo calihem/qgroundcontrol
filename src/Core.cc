@@ -114,8 +114,8 @@ Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
 		// Exit application
 		if (ret == QMessageBox::Yes)
 		{
-		//mainWindow->close();
-		QTimer::singleShot(200, mainWindow, SLOT(close()));
+			//mainWindow->close();
+			QTimer::singleShot(200, mainWindow, SLOT(close()));
 		}
 	}
 
