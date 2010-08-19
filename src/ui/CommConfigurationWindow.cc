@@ -97,10 +97,11 @@ CommConfigurationWindow::CommConfigurationWindow(LinkInterface* link, ProtocolIn
 	// set the connection state
 	setConnectionState( typeLinkPair.second->isConnected() );
 
-	// switch editButton to Add or Delete
-	setupEditButton(newLink || newProtocol);
-
-	if( !(newLink || newProtocol) )
+	if (newLink || newProtocol)
+	{ // disable delete button
+		ui.deleteButton->setEnabled(false);
+	}
+	else
 	{
 		// disable comboboxes
 		ui.linkType->setEnabled(false);
@@ -115,6 +116,7 @@ CommConfigurationWindow::CommConfigurationWindow(LinkInterface* link, ProtocolIn
 		this, SLOT(setRemovedLink(int)) );
 	// set up user actions
 	connect(ui.connectButton, SIGNAL(clicked()), this, SLOT(toggleConnection()));
+	connect(ui.deleteButton, SIGNAL(clicked()), this, SLOT(removeLink()));
 	connect(ui.closeButton, SIGNAL(clicked()), this->window(), SLOT(close()));
 	// set up combobox signals
 	connect( ui.linkType, SIGNAL(currentIndexChanged(int)),
@@ -122,7 +124,6 @@ CommConfigurationWindow::CommConfigurationWindow(LinkInterface* link, ProtocolIn
 	connect( ui.protocolType, SIGNAL(currentIndexChanged(int)),
 		this, SLOT(changeProtocol(int)) );
 
-	// set up window title
 	hide();
 }
 
@@ -200,27 +201,6 @@ void CommConfigurationWindow::setupUI(const ProtocolStack::TypeProtocolPair &pai
 	}
 }
 
-void CommConfigurationWindow::setupEditButton(bool add)
-{
-	ui.editButton->disconnect();
-	if (add)
-	{
-		ui.editButton->setText( tr("Add") );
-		connect(ui.editButton, SIGNAL(clicked()),
-			this, SLOT(addLink()));
-		//disable connect button
-		ui.connectButton->setEnabled(false);
-	}
-	else
-	{
-		ui.editButton->setText( tr("Delete") );
-		connect(ui.editButton, SIGNAL(clicked()),
-			this, SLOT(removeLink()));
-		//enable connect button
-		ui.connectButton->setEnabled(true);
-	}
-}
-
 void CommConfigurationWindow::setupLinkSignals()
 {
 	connect( typeLinkPair.second, SIGNAL(opened(bool)),
@@ -285,11 +265,14 @@ void CommConfigurationWindow::setAddedLink(int linkID)
 
 	// set connection state
 	setConnectionState( typeLinkPair.second->isConnected() );
-	// switch editButton to Delete
-	setupEditButton(false);
+	// enable delete button
+	ui.deleteButton->setEnabled(true);
 	// disable comboboxes
 	ui.linkType->setEnabled(false);
 	ui.protocolType->setEnabled(false);
+	// connect
+	if ( !typeLinkPair.second->isConnected() )
+		typeLinkPair.second->open();
 }
 
 void CommConfigurationWindow::removeLink()
@@ -306,10 +289,10 @@ void CommConfigurationWindow::setRemovedLink(int linkID)
 	// enable comboboxes
 	ui.linkType->setEnabled(true);
 	ui.protocolType->setEnabled(true);
-	// switch editButton to Add
-	setupEditButton(true);
 	// create new link and widget
 	changeLink( ui.linkType->currentIndex() );
+	// disable delete button
+	ui.deleteButton->setEnabled(false);
 }
 
 
@@ -318,7 +301,16 @@ void CommConfigurationWindow::toggleConnection()
 	if ( typeLinkPair.second->isConnected() )
 		typeLinkPair.second->close();
 	else
-		typeLinkPair.second->open();
+	{
+		if (ProtocolStack::instance().getLink(typeLinkPair.second->getID()) )
+		{ // link belongs to ProtocolStack
+			typeLinkPair.second->open();
+		}
+		else
+		{ // link doesn't belong to ProtocolStack
+			addLink();
+		}
+	}
 }
 
 void CommConfigurationWindow::setConnectionState(bool connected)
@@ -327,14 +319,14 @@ void CommConfigurationWindow::setConnectionState(bool connected)
 	{
 		ui.connectionStatusLabel->setText( tr("Connected") );
 		ui.connectButton->setText( tr("Disconnect") );
-		ui.editButton->setEnabled(false);
+		ui.deleteButton->setEnabled(false);
 		ui.linkGroupBox->setEnabled(false);
 	}
 	else
 	{
 		ui.connectionStatusLabel->setText( tr("Disconnected") );
 		ui.connectButton->setText( tr("Connect") );
-		ui.editButton->setEnabled(true);
+		ui.deleteButton->setEnabled(true);
 		ui.linkGroupBox->setEnabled(true);
 	}
 }

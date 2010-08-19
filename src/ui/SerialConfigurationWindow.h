@@ -67,12 +67,15 @@ class SerialConfigurationWindow : public QWidget
 		void setParityEven();
 		void setDataBits(int bits);
 		void setStopBits(int bits);
+		void showEvent(QShowEvent* event);
+		void hideEvent(QHideEvent* event);
 
 	protected:
 
 	private:
 		Ui::serialSettings ui;
 		SerialLinkInterface* serialLink;
+		QTimer portCheckTimer;
 
 		/// fills the port name combobox with ports found on system
 		void fillPortNameComboBox();

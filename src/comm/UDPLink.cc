@@ -184,6 +184,7 @@ void UDPLink::emitBytesReady()
  **/
 bool UDPLink::close()
 {
+    //FIXME: only emit closed, if state is QAbstractSocket::ConnectedState || QAbstractSocket::BoundState
     delete socket;
     socket = NULL;
 

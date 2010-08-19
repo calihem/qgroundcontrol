@@ -132,9 +132,9 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="editButton">
+      <widget class="QPushButton" name="deleteButton">
        <property name="text">
-        <string>Edit</string>
+        <string>Delete</string>
        </property>
       </widget>
      </item>

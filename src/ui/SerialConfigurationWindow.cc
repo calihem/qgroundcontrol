@@ -244,6 +244,8 @@ SerialConfigurationWindow::SerialConfigurationWindow(SerialLinkInterface* link, 
 
 	loadSettingsFromPort();
 
+	portCheckTimer.setInterval(1000);
+
 	setupSignals();
 
 	// Display the widget
@@ -466,8 +468,8 @@ void SerialConfigurationWindow::setupSignals()
 		this, SLOT(setPortName(const QString&)));
 	connect(ui.portNameComboBox, SIGNAL(currentIndexChanged(const QString&)),
 		this, SLOT(setPortName(const QString&)));
-	connect( ui.refreshButton, SIGNAL(clicked()),
-		this, SLOT(refreshPortNameComboBox()) );
+	connect( &portCheckTimer, SIGNAL(timeout()),
+		 this, SLOT(refreshPortNameComboBox()) );
 	connect(ui.baudRateComboBox, SIGNAL(activated(int)),
 		this, SLOT(setBaudRate(int)));
 	connect(ui.flowControlCheckBox, SIGNAL(toggled(bool)),
@@ -577,5 +579,21 @@ void SerialConfigurationWindow::setStopBits(int bits)
 			break;
 		default:
 			break;
+	}
+}
+
+void SerialConfigurationWindow::showEvent(QShowEvent* event)
+{
+	if (event->isAccepted())
+	{
+		portCheckTimer.start();
+	}
+}
+
+void SerialConfigurationWindow::hideEvent(QHideEvent* event)
+{
+	if (event->isAccepted())
+	{
+		portCheckTimer.stop();
 	}
 }

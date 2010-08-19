@@ -169,20 +169,25 @@ qint64 SerialLink::read(char* data, qint64 maxLength)
 	return bytesRead;
 }
 
-bool SerialLink::close() {
-	if( isRunning() )
+bool SerialLink::close()
+{
+	if ( isRunning() )
 	{ //terminate thread
 		loopForever = false;
 		wait();
+		
 	}
-	
-	dataMutex.lock();
-	port.flush();
-	port.close();
-	dataMutex.unlock();
 
-	emit closed();
-	emit opened(false);
+	if (port.isOpen() )
+	{
+		dataMutex.lock();
+		port.flush();
+		port.close();
+		dataMutex.unlock();
+
+		emit closed();
+		emit opened(false);
+	}
 
 	return !port.isOpen();
 }
