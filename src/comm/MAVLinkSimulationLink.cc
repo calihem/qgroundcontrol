@@ -103,6 +103,7 @@ MAVLinkSimulationLink::MAVLinkSimulationLink(QString readFile, QString writeFile
 
 MAVLinkSimulationLink::~MAVLinkSimulationLink()
 {
+	close();
     //TODO Check destructor
     //    fileStream->flush();
     //    outStream->flush();
@@ -111,23 +112,23 @@ MAVLinkSimulationLink::~MAVLinkSimulationLink()
 
 void MAVLinkSimulationLink::run()
 {
+	char buffer[1024];
+	static quint64 last = 0;
 
-    status.mode = MAV_MODE_UNINIT;
-    status.status = MAV_STATE_UNINIT;
-    status.vbat = 0;
-    status.motor_block = 1;
-    status.packet_drop = 0;
+	status.mode = MAV_MODE_UNINIT;
+	status.status = MAV_STATE_UNINIT;
+	status.vbat = 0;
+	status.motor_block = 1;
+	status.packet_drop = 0;
 
-    forever
-    {
-
-        static quint64 last = 0;
-
-        if (MG::TIME::getGroundTimeNow() - last >= rate)
-        {
-            if (_isConnected)
-            {
-                mainloop();
+	loopForever = true;
+	while(loopForever)
+	{
+		if (MG::TIME::getGroundTimeNow() - last >= rate)
+		{
+			if (_isConnected)
+			{
+				mainloop();
 
                 // FIXME Hacky code to read from packet log file
 //                readyBufferMutex.lock();
@@ -137,20 +138,24 @@ void MAVLinkSimulationLink::run()
 //                }
 //                readyBufferMutex.unlock();
 
-
-
-
-
-
-
-//                 emit bytesReady(this);
-		emit readyRead(id);
-            }
-            last = MG::TIME::getGroundTimeNow();
-        }
-        MG::SLEEP::msleep(2);
-
-    }
+				if (readingMode == AutoReading)
+				{
+					qint64 bytesRead = read(buffer, 1024);
+					if (bytesRead > 0)
+					{
+						// Construct new QByteArray of size dataRead without copying buffer
+						QByteArray data = QByteArray::fromRawData(buffer, bytesRead);
+						// Emit the new data
+						emit dataReceived(id, data);
+					}
+				}
+				else if (readingMode == ManualReading)
+					emit readyRead(id);
+			}
+			last = MG::TIME::getGroundTimeNow();
+		}
+		MG::SLEEP::msleep(2);
+	}
 }
 
 void MAVLinkSimulationLink::enqueue(uint8_t* stream, uint8_t* index, mavlink_message_t* msg)
@@ -746,7 +751,8 @@ qint64 MAVLinkSimulationLink::write(const char* data, qint64 size)
 }
 
 
-qint64 MAVLinkSimulationLink::read(char* const data, qint64 maxLength) {
+qint64 MAVLinkSimulationLink::read(char* const data, qint64 maxLength)
+{
     // Lock concurrent resource readyBuffer
     readyBufferMutex.lock();
     qint64 len = maxLength;
@@ -788,19 +794,21 @@ qint64 MAVLinkSimulationLink::read(char* const data, qint64 maxLength) {
  * @return True if connection has been disconnected, false if connection
  * couldn't be disconnected.
  **/
-bool MAVLinkSimulationLink::close() {
+bool MAVLinkSimulationLink::close()
+{
+	if ( isRunning() )
+	{ //terminate thread
+		loopForever = false;
+		wait();
+	}
 
-    if(isConnected()) {
-        //        timer->stop();
+	if(isConnected())
+	{
+		_isConnected = false;
+		emit closed();
+	}
 
-        _isConnected = false;
-
-        emit closed();
-
-        //exit();
-    }
-
-    return true;
+	return true;
 }
 
 /**
