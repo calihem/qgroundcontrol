@@ -175,7 +175,7 @@ inline void UDPLink::setPort(quint16 port)
 
 inline void UDPLink::reconnect()
 {
-	if (socket.state() ==  QAbstractSocket::BoundState)
+	if ( isConnected() )
 	{ //reconnect
 		close();
 		open();

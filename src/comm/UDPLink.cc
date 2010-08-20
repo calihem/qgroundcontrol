@@ -141,7 +141,7 @@ bool UDPLink::close()
 		loopForever = false;
 		wait();
 	}
-	else if (socket.state() == QAbstractSocket::BoundState)
+	if (socket.state() == QAbstractSocket::BoundState)
 	{
 		socket.flush();
 		socket.close();
@@ -150,7 +150,7 @@ bool UDPLink::close()
 		emit opened(false);
 	}
 
-	return !socket.isOpen();
+	return !isConnected();
 }
 
 bool UDPLink::open()
