@@ -44,30 +44,29 @@ MapWidget::MapWidget(QWidget *parent) :
         m_ui(new Ui::MapWidget)
 {
     m_ui->setupUi(this);
+
     // Accept focus by clicking or keyboard
     this->setFocusPolicy(Qt::StrongFocus);
 
     // create MapControl
     mc = new MapControl(QSize(320, 240));
     mc->showScale(true);
+    mc->showCoord(true);
     mc->enablePersistentCache();
-
-    //uasIcons = QMap<int, CirclePoint*>();
-
-    //QSize(480,640)
-    //      ImageManager::instance()->setProxy("www-cache", 8080);
+    mc->setMouseTracking(true); // required to update the mouse position for diplay and capture
 
     // create MapAdapter to get maps from
     TileMapAdapter* osmAdapter = new TileMapAdapter("tile.openstreetmap.org", "/%1/%2/%3.png", 256, 0, 17);
-    //GoogleSatMapAdapter* gSatAdapter = new GoogleSatMapAdapter();
 
     // create a layer with the mapadapter and type MapLayer
     osmLayer = new Layer("Custom Layer", osmAdapter, Layer::MapLayer);
-    //Layer* gSatLayer = new Layer("Custom Layer", gSatAdapter, Layer::MapLayer);
+    // create a layer with the mapadapter and type GeometryLayer (for waypoints)
+    geomLayer = new Layer("Geom Layer", osmAdapter, Layer::GeometryLayer);
 
-    // add Layer to the MapControl
+    // add Layers to the MapControl and set zoom level
     mc->addLayer(osmLayer);
-    //mc->addLayer(gSatLayer);
+    mc->addLayer(geomLayer);
+    mc->setZoom(3);
 
     // display the MapControl in the application
     QHBoxLayout* layout = new QHBoxLayout;
@@ -75,40 +74,127 @@ MapWidget::MapWidget(QWidget *parent) :
     layout->addWidget(mc);
     setLayout(layout);
 
-    // create buttons as controls for zoom
+    // create buttons to control the map (zoom, GPS tracking and WP capture)
     QPushButton* zoomin = new QPushButton(QIcon(":/images/actions/list-add.svg"), "", this);
     QPushButton* zoomout = new QPushButton(QIcon(":/images/actions/list-remove.svg"), "", this);
+    createPath = new QPushButton(QIcon(":/images/actions/go-bottom.svg"), "", this);
     followgps = new QPushButton(QIcon(":/images/actions/system-lock-screen.svg"), "", this);
-    followgps->setCheckable(true);
-    // gpsposition = new QLabel();
+
     zoomin->setMaximumWidth(50);
     zoomout->setMaximumWidth(50);
+    createPath->setMaximumWidth(50);
     followgps->setMaximumWidth(50);
-    //gpsposition->setFont(QFont("Arial", 10));
 
-    connect(zoomin, SIGNAL(clicked(bool)),
-            mc, SLOT(zoomIn()));
-    connect(zoomout, SIGNAL(clicked(bool)),
-            mc, SLOT(zoomOut()));
+    // Set checkable buttons
+    // TODO: Currently checked buttons are are very difficult to distinguish when checked.
+    //       create a style and the slots to change the background so it is easier to distinguish
+    followgps->setCheckable(true);
+    createPath->setCheckable(true);
 
-    // add zoom buttons to the layout of the MapControl
+    // add buttons to control the map (zoom, GPS tracking and WP capture)
     QVBoxLayout* innerlayout = new QVBoxLayout;
     innerlayout->addWidget(zoomin);
     innerlayout->addWidget(zoomout);
     innerlayout->addWidget(followgps);
-    //innerlayout->addWidget(gpsposition);
+    innerlayout->addWidget(createPath);
     mc->setLayout(innerlayout);
 
+
+    // Connect the required signals-slots
+    connect(zoomin, SIGNAL(clicked(bool)),
+            mc, SLOT(zoomIn()));
+
+    connect(zoomout, SIGNAL(clicked(bool)),
+            mc, SLOT(zoomOut()));
+
+    connect(UASManager::instance(), SIGNAL(UASCreated(UASInterface*)),
+            this, SLOT(addUAS(UASInterface*)));
+
+    connect(mc, SIGNAL(mouseEventCoordinate(const QMouseEvent*, const QPointF)),
+            this, SLOT(captureMapClick(const QMouseEvent*, const QPointF)));
+
+    connect(createPath, SIGNAL(clicked(bool)),
+            this, SLOT(createPathButtonClicked()));
+
+    connect(geomLayer, SIGNAL(geometryClicked(Geometry*,QPoint)),
+            this, SLOT(captureGeometryClick(Geometry*, QPoint)));
+
+
+    // Configure the WP Path's pen
+    pointPen = new QPen(QColor(0, 255,0));
+    pointPen->setWidth(3);
+
+    path = new LineString (wps, "UAV Path", pointPen);
+    mc->layer("Geom Layer")->addGeometry(path);
+
+    this->setVisible(false);
+
+
+    // Attic (Code that was commented)
+    // ==============================
+    //uasIcons = QMap<int, CirclePoint*>();
+
+    //QSize(480,640)
+    //      ImageManager::instance()->setProxy("www-cache", 8080);
+
+    //GoogleSatMapAdapter* gSatAdapter = new GoogleSatMapAdapter();
+    //Layer* gSatLayer = new Layer("Custom Layer", gSatAdapter, Layer::MapLayer);
+    //mc->addLayer(gSatLayer);
+
+    // gpsposition = new QLabel();
+    //gpsposition->setFont(QFont("Arial", 10));
     //GPS_Neo* gm = new GPS_Neo();
     //connect(gm, SIGNAL(new_position(float, QPointF)),
     //                  this, SLOT(updatePosition(float, QPointF)));
     //gm->start();
 
-    mc->setZoom(3);
+}
 
-    connect(UASManager::instance(), SIGNAL(UASCreated(UASInterface*)), this, SLOT(addUAS(UASInterface*)));
+void MapWidget::createPathButtonClicked(){
+  if (createPath->isChecked()){
+    // change the cursor shape
+    this->setCursor(Qt::PointingHandCursor);
 
-    this->setVisible(false);
+    // Clear the previous WP track
+    // TODO: Move this to an actual clear track button and add a warning dialog
+    mc->layer("Geom Layer")->clearGeometries();
+    wps.clear();
+    path->setPoints(wps);
+    mc->layer("Geom Layer")->addGeometry(path);
+  } else {
+    this->setCursor(Qt::ArrowCursor);
+  }
+
+}
+
+
+void MapWidget::captureMapClick(const QMouseEvent* event, const QPointF coordinate){
+
+  if (QEvent::MouseButtonRelease == event->type() && createPath->isChecked()){
+
+    // Create waypoint name
+    QString str;
+    str = QString("WP%1").arg(path->numberOfPoints()+1);
+
+
+    qDebug()<< "Waypoint " << str;
+    qDebug()<< "Lat: " << coordinate.y();
+    qDebug()<< "Lon: " << coordinate.x();
+
+    // create the WP and set everything in the LineString to display the path
+    mc->layer("Geom Layer")->addGeometry(new CirclePoint(coordinate.x(), coordinate.y(), 10, str));
+    wps.append(new Point(coordinate.x(), coordinate.y(),str));
+    path->addPoint(new Point(coordinate.x(), coordinate.y(),str));
+
+    mc->updateRequestNew();
+  }
+}
+
+void MapWidget::captureGeometryClick(Geometry* geom, QPoint point){
+  Q_UNUSED(point);
+
+  qDebug ()<< geom->name();
+  qDebug() << geom->GeometryType;
 }
 
 MapWidget::~MapWidget()
@@ -180,7 +266,7 @@ void MapWidget::updateGlobalPosition(UASInterface* uas, double lat, double lon, 
         //    points.append(new Point(8.260378, 50.030345, "Wiesbaden-Mainz-Amoneburg, Dyckerhoffstraße"));
 
         // Connect click events of the layer to this object
-        //connect(osmLayer, SIGNAL(geometryClicked(Geometry*, QPoint)),
+        // connect(osmLayer, SIGNAL(geometryClicked(Geometry*, QPoint)),
         //                  this, SLOT(geometryClicked(Geometry*, QPoint)));
 
         // Sets the view to the interesting area

@@ -132,7 +132,6 @@ Core::Core(int &argc, char* argv[]) : QApplication(argc, argv)
     // Add OpalRT Link, but do not connect
     OpalLink* opalLink = new OpalLink();
     ProtocolStack::instance().addLink(opalLink);
-    opalLink->open();
 #warning OPAL LINK NOW AUTO CONNECTING IN CORE.CC
 #endif
 
